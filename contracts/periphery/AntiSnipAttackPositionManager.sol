@@ -142,4 +142,36 @@ contract AntiSnipAttackPositionManager is BasePositionManager {
 
     emit RemoveLiquidity(params.tokenId, params.liquidity, amount0, amount1, additionalRTokenOwed);
   }
+
+  function syncFeeGrowth(uint256 tokenId) external override returns (uint256 additionalRTokenOwed) {
+    Position storage pos = _positions[tokenId];
+
+    PoolInfo memory poolInfo = _poolInfoById[pos.poolId];
+    IPool pool = _getPool(poolInfo.token0, poolInfo.token1, poolInfo.fee);
+
+    uint256 feeGrowthInsideLast = pool.tweakPosZeroLiq(
+      pos.tickLower,
+      pos.tickUpper
+    );
+
+    uint256 feeGrowthInsideDiff;
+    uint128 tmpLiquidity = pos.liquidity;
+
+    unchecked {
+      feeGrowthInsideDiff = feeGrowthInsideLast - pos.feeGrowthInsideLast;
+    }
+    (additionalRTokenOwed, ) = AntiSnipAttack.update(
+      antiSnipAttackData[tokenId],
+      tmpLiquidity,
+      0,
+      block.timestamp.toUint32(),
+      false,
+      FullMath.mulDivFloor(tmpLiquidity, feeGrowthInsideDiff, C.TWO_POW_96),
+      IFactory(factory).vestingPeriod()
+    );
+    pos.rTokenOwed += additionalRTokenOwed;
+    pos.feeGrowthInsideLast = feeGrowthInsideLast;
+
+    emit SyncFeeGrowth(tokenId, additionalRTokenOwed);
+  }
 }
