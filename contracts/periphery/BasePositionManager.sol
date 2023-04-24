@@ -243,7 +243,7 @@ contract BasePositionManager is
     (amount0, amount1) = pool.burnRTokens(rTokenQty, false);
     require(amount0 >= params.amount0Min && amount1 >= params.amount1Min, 'Low return amounts');
 
-    emit CollectFee(params.tokenId, rTokenQty, amount0, amount1);
+    emit BurnRToken(uint256 indexed tokenId, uint256 rTokenQty, false);
   }
 
   /**

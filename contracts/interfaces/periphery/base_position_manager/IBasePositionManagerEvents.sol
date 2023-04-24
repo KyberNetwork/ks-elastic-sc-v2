@@ -50,10 +50,8 @@ interface IBasePositionManagerEvents {
 
   /// @notice Emitted when burn position's RToken
   /// @param tokenId id of the token
-  /// @param rTokenBurn amount of rToken burnt
-  /// @param amount0 amount of pool token0 collected
-  /// @param amount0 amount of pool token1 collected
-  event CollectFee(uint256 indexed tokenId, uint256 rTokenBurn, uint256 amount0, uint256 amount1);
+  /// @param rTokenBurn amount of position's RToken burnt
+  event BurnRToken(uint256 indexed tokenId, uint256 rTokenBurn, bool isLogicalBurn);
 
   /// @notice Emitted when sync fee growth
   /// @param tokenId id of the token

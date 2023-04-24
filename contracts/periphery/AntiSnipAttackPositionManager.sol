@@ -138,10 +138,9 @@ contract AntiSnipAttackPositionManager is BasePositionManager {
     pos.feeGrowthInsideLast = feeGrowthInsideLast;
     if (feesBurnable > 0){
       uint256 rTokenBalance = IERC20(address(pool)).balanceOf(address(this));
-      pool.burnRTokens(
-        feesBurnable > rTokenBalance ? rTokenBalance : feesBurnable,
-        true
-      );
+      feesBurnable = feesBurnable > rTokenBalance ? rTokenBalance : feesBurnable;
+      pool.burnRTokens(feesBurnable, true);
+      emit BurnRToken(params.tokenId, feesBurnable, true);
     }
 
     pos.liquidity = tmpLiquidity - params.liquidity;
