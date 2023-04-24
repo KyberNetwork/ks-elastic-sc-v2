@@ -204,7 +204,7 @@ contract BasePositionManager is
     emit RemoveLiquidity(params.tokenId, params.liquidity, amount0, amount1, additionalRTokenOwed);
   }
 
-  function syncFeeGrowth(uint256 tokenId) external override returns(uint256 additionalRTokenOwed){
+  function syncFeeGrowth(uint256 tokenId) external virtual override returns(uint256 additionalRTokenOwed){
     Position storage pos = _positions[tokenId];
 
     PoolInfo memory poolInfo = _poolInfoById[pos.poolId];
@@ -239,13 +239,11 @@ contract BasePositionManager is
 
     pos.rTokenOwed = 0;
     uint256 rTokenBalance = IERC20(address(pool)).balanceOf(address(this));
-    (amount0, amount1) = pool.burnRTokens(
-      rTokenQty > rTokenBalance ? rTokenBalance : rTokenQty,
-      false
-    );
+    rTokenQty = rTokenQty > rTokenBalance ? rTokenBalance : rTokenQty;
+    (amount0, amount1) = pool.burnRTokens(rTokenQty, false);
     require(amount0 >= params.amount0Min && amount1 >= params.amount1Min, 'Low return amounts');
 
-    emit BurnRToken(params.tokenId, rTokenQty);
+    emit BurnRTokenOwed(params.tokenId, rTokenQty, false);
   }
 
   /**

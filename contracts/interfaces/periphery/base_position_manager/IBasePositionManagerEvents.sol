@@ -50,8 +50,8 @@ interface IBasePositionManagerEvents {
 
   /// @notice Emitted when burn position's RToken
   /// @param tokenId id of the token
-  /// @param rTokenBurn amount of position's RToken burnt
-  event BurnRToken(uint256 indexed tokenId, uint256 rTokenBurn);
+  /// @param isLogicalBurn true if logical burn from antisnip attack manager, otherwise false
+  event BurnRTokenOwed(uint256 indexed tokenId, uint256 rTokenBurn, bool isLogicalBurn);
 
   /// @notice Emitted when sync fee growth
   /// @param tokenId id of the token

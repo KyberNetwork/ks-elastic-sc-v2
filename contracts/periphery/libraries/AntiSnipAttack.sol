@@ -126,7 +126,7 @@ library AntiSnipAttack {
           currentTime,
         updatedLiquidity
       ).toUint32();
-    } else if (_self.feesLocked > 0) {
+    } else if (_self.feesLocked > 0 && liquidityDelta != 0) {
       feesBurnable = (_self.feesLocked * liquidityDelta) / uint256(currentLiquidity);
       _self.feesLocked -= feesBurnable;
     }
