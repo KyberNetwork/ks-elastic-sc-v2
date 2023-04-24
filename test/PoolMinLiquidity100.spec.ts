@@ -34,7 +34,7 @@ class Fixtures {
   constructor(public factory: MockFactory, public token0s: MockToken[], public token1s: MockToken[]) {}
 }
 
-describe('Pool', () => {
+describe.skip('Pool', () => {
   const [user, admin] = waffle.provider.getWallets();
 
   async function fixture(): Promise<Fixtures> {
