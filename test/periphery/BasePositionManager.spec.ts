@@ -783,9 +783,10 @@ describe('BasePositionManager', () => {
   };
 
   const syncFeeGrowth = async function (
+    user: Wallet,
     tokenId: BigNumber
   ): Promise<ContractTransaction> {
-    let tx = await positionManager.syncFeeGrowth(tokenId);
+    let tx = await positionManager.connect(user).syncFeeGrowth(tokenId);
     return tx;
   };
 
@@ -1524,7 +1525,7 @@ describe('BasePositionManager', () => {
 
         let userDataB = await positionManager.positions(tokenId);
 
-        await syncFeeGrowth(tokenId);
+        await syncFeeGrowth(sender, tokenId);
 
         let userData = await positionManager.positions(tokenId);
 
