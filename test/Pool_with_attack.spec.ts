@@ -55,7 +55,7 @@ class Fixtures {
   ) {}
 }
 
-describe.only('Pool_with_attack', () => {
+describe('Pool_with_attack', () => {
   const [user, admin, configMaster] = waffle.provider.getWallets();
 
   async function fixture(): Promise<Fixtures> {
