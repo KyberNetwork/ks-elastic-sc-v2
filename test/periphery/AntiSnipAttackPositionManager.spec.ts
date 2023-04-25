@@ -183,7 +183,7 @@ describe('AntiSnipAttackPositionManager', () => {
     });
   });
 
-  const initLiquidity = async (user: Wallet, token0: string, token1: string) => {
+  const initLiquidity = async (user: Wallet, token0: string, token1: string, amount = 1000000) => {
     [token0, token1] = sortTokens(token0, token1);
     await positionManager.connect(user).mint({
       token0: token0,
@@ -192,8 +192,8 @@ describe('AntiSnipAttackPositionManager', () => {
       tickLower: -100 * tickDistanceArray[0],
       tickUpper: 100 * tickDistanceArray[0],
       ticksPrevious: ticksPrevious,
-      amount0Desired: BN.from(1000000),
-      amount1Desired: BN.from(1000000),
+      amount0Desired: BN.from(amount),
+      amount1Desired: BN.from(amount),
       amount0Min: 0,
       amount1Min: 0,
       recipient: user.address,
@@ -460,7 +460,7 @@ describe('AntiSnipAttackPositionManager', () => {
     });
 
     it('should have burnable tokens if liquidity removal happens during vesting period for fresh position', async () => {
-      await initLiquidity(user, tokenA.address, tokenB.address);
+      await initLiquidity(user, tokenA.address, tokenB.address, 100000000);
 
       let gasUsed = ZERO;
       let numRuns = 3;
