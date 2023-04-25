@@ -783,9 +783,10 @@ describe('BasePositionManager', () => {
   };
 
   const syncFeeGrowth = async function (
+    user: Wallet,
     tokenId: BigNumber
   ): Promise<ContractTransaction> {
-    let tx = await positionManager.syncFeeGrowth(tokenId);
+    let tx = await positionManager.connect(user).syncFeeGrowth(tokenId);
     return tx;
   };
 
@@ -1524,7 +1525,7 @@ describe('BasePositionManager', () => {
 
         let userDataB = await positionManager.positions(tokenId);
 
-        await syncFeeGrowth(tokenId);
+        await syncFeeGrowth(sender, tokenId);
 
         let userData = await positionManager.positions(tokenId);
 
@@ -1788,7 +1789,7 @@ describe('BasePositionManager', () => {
       expect(await positionManager.supportsInterface('0x5b5e139f')).to.be.eq(true); // ERC721Metadata
       expect(await positionManager.supportsInterface('0x780e9d63')).to.be.eq(true); // ERC721Enumerable
       expect(await positionManager.supportsInterface('0x7dd42bd6')).to.be.eq(true); // ERC721Permit
-      expect(await positionManager.supportsInterface('0x53e38b0d')).to.be.eq(true); // IBasePositionManager
+      expect(await positionManager.supportsInterface('0x62FDF299')).to.be.eq(true); // IBasePositionManager
     });
 
     it('un-support interface', async () => {
