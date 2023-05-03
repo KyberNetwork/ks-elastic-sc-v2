@@ -25,7 +25,7 @@ import {
 
 import {deployFactory} from '../helpers/setup';
 import {snapshot, revertToSnapshot, setNextBlockTimestampFromCurrent} from '../helpers/hardhat';
-import {BN, PRECISION, ZERO, MIN_TICK, ONE} from '../helpers/helper';
+import {BN, PRECISION, ZERO_ADDRESS, ZERO, MIN_TICK, ONE} from '../helpers/helper';
 import {encodePriceSqrt, sortTokens, orderTokens} from '../helpers/utils';
 
 const showTxGasUsed = true;
@@ -51,8 +51,9 @@ let initialPrice: BigNumber;
 let snapshotId: any;
 let initialSnapshotId: any;
 
+
 describe('AntiSnipAttackPositionManager', () => {
-  const [user, admin] = waffle.provider.getWallets();
+  const [user, admin, other] = waffle.provider.getWallets();
   const tickLower = -100 * tickDistanceArray[0];
   const tickUpper = 100 * tickDistanceArray[0];
 
@@ -90,19 +91,42 @@ describe('AntiSnipAttackPositionManager', () => {
     initialPrice = encodePriceSqrt(1, 1);
 
     await weth.connect(user).deposit({value: PRECISION.mul(10)});
+    await weth.connect(other).deposit({value: PRECISION.mul(10)});
 
     await weth.connect(user).approve(positionManager.address, BIG_AMOUNT);
     await tokenA.connect(user).approve(positionManager.address, BIG_AMOUNT);
     await tokenB.connect(user).approve(positionManager.address, BIG_AMOUNT);
+    await weth.connect(other).approve(positionManager.address, BIG_AMOUNT);
+    await tokenA.connect(other).approve(positionManager.address, BIG_AMOUNT);
+    await tokenB.connect(other).approve(positionManager.address, BIG_AMOUNT);
 
     await weth.connect(user).approve(router.address, BIG_AMOUNT);
     await tokenA.connect(user).approve(router.address, BIG_AMOUNT);
     await tokenB.connect(user).approve(router.address, BIG_AMOUNT);
+    await weth.connect(other).approve(router.address, BIG_AMOUNT);
+    await tokenA.connect(other).approve(router.address, BIG_AMOUNT);
+    await tokenB.connect(other).approve(router.address, BIG_AMOUNT);
 
     await tokenA.transfer(user.address, PRECISION.mul(2000000));
     await tokenB.transfer(user.address, PRECISION.mul(2000000));
+    await tokenA.transfer(other.address, PRECISION.mul(2000000));
+    await tokenB.transfer(other.address, PRECISION.mul(2000000));
 
     [token0, token1] = sortTokens(tokenA.address, tokenB.address);
+
+    getBalances = async (account: string, tokens: string[]) => {
+      let balances = [];
+      for (let i = 0; i < tokens.length; i++) {
+        if (tokens[i] == ZERO_ADDRESS) {
+          balances.push(await ethers.provider.getBalance(account));
+        } else {
+          balances.push(await (await Token.attach(tokens[i])).balanceOf(account));
+        }
+      }
+      return {
+        tokenBalances: balances,
+      };
+    };
 
     initialSnapshotId = await snapshot();
     snapshotId = initialSnapshotId;
@@ -123,6 +147,13 @@ describe('AntiSnipAttackPositionManager', () => {
       .connect(user)
       .createAndUnlockPoolIfNecessary(token0, token1, swapFeeUnitsArray[0], initialPrice);
   };
+
+  let getBalances: (
+    who: string,
+    tokens: string[]
+  ) => Promise<{
+    tokenBalances: BigNumber[];
+  }>;
 
   describe(`#mint`, async () => {
     before('create and unlock pools', async () => {
@@ -192,8 +223,8 @@ describe('AntiSnipAttackPositionManager', () => {
       tickLower: -100 * tickDistanceArray[0],
       tickUpper: 100 * tickDistanceArray[0],
       ticksPrevious: ticksPrevious,
-      amount0Desired: BN.from(1000000),
-      amount1Desired: BN.from(1000000),
+      amount0Desired: BN.from(100000000),
+      amount1Desired: BN.from(100000000),
       amount0Min: 0,
       amount1Min: 0,
       recipient: user.address,
@@ -231,6 +262,34 @@ describe('AntiSnipAttackPositionManager', () => {
     };
     // need to use multicall to collect tokens
     let multicallData = [positionManager.interface.encodeFunctionData('removeLiquidity', [removeLiquidityParams])];
+    multicallData.push(positionManager.interface.encodeFunctionData('transferAllTokens', [tokenIn, 0, user.address]));
+    multicallData.push(positionManager.interface.encodeFunctionData('transferAllTokens', [tokenOut, 0, user.address]));
+    let tx = await positionManager.connect(user).multicall(multicallData);
+    return tx;
+  };
+
+  const syncFeeGrowth = async function (
+    user: Wallet,
+    tokenId: BigNumber
+  ): Promise<ContractTransaction> {
+    let tx = await positionManager.connect(user).syncFeeGrowth(tokenId);
+    return tx;
+  };
+
+  const burnRTokens = async function (
+    tokenIn: string,
+    tokenOut: string,
+    user: Wallet,
+    tokenId: BigNumber
+  ): Promise<ContractTransaction> {
+    // call to burn rTokens
+    let burnRTokenParams = {
+      tokenId: tokenId,
+      amount0Min: 1,
+      amount1Min: 1,
+      deadline: PRECISION,
+    };
+    let multicallData = [positionManager.interface.encodeFunctionData('burnRTokens', [burnRTokenParams])];
     multicallData.push(positionManager.interface.encodeFunctionData('transferAllTokens', [tokenIn, 0, user.address]));
     multicallData.push(positionManager.interface.encodeFunctionData('transferAllTokens', [tokenOut, 0, user.address]));
     let tx = await positionManager.connect(user).multicall(multicallData);
@@ -566,6 +625,78 @@ describe('AntiSnipAttackPositionManager', () => {
         deadline: PRECISION,
       });
     });
+  });
+
+  describe(`#sync fee growth`, async () => {
+    before('create and unlock pools', async () => {
+      await revertToSnapshot(initialSnapshotId);
+      initialSnapshotId = await snapshot();
+      await createAndUnlockPools();
+      snapshotId = await snapshot();
+    });
+
+    beforeEach('revert to snapshot', async () => {
+      await revertToSnapshot(snapshotId);
+      snapshotId = await snapshot();
+      nextTokenId = await positionManager.nextTokenId();
+    });
+
+    it('revert sync fee growth author', async () => {
+      await initLiquidity(user, tokenA.address, tokenB.address);
+      await initLiquidity(other, tokenA.address, tokenB.address);
+
+      let users = [user, other];
+      let tokenIds = [nextTokenId, nextTokenId.add(1)];
+      let numRuns = 2;
+
+      for (let i = 0; i < numRuns; i++) {
+        let sender = users[(i+1) % 2];
+        let tokenId = tokenIds[i % 2];
+
+        // made some swaps to get fees
+        for (let j = 0; j < 5; j++) {
+          await swapExactInput(tokenA.address, tokenB.address, swapFeeUnitsArray[0], BN.from(100000 * (j + 1)));
+          await swapExactInput(tokenB.address, tokenA.address, swapFeeUnitsArray[0], BN.from(150000 * (j + 1)));
+        }
+
+        await expect(
+          positionManager.connect(sender).syncFeeGrowth(tokenId)
+        ).to.be.revertedWith('Not approved');
+      }
+    });
+
+    it('sync fee growth -> burnRToken and check lock amount', async () => {
+      await initLiquidity(user, tokenA.address, tokenB.address);
+      for (let j = 0; j < 5; j++) {
+        await swapExactInput(tokenA.address, tokenB.address, swapFeeUnitsArray[0], BN.from(100000 * (j + 1)));
+        await swapExactInput(tokenB.address, tokenA.address, swapFeeUnitsArray[0], BN.from(150000 * (j + 1)));
+      }
+      await syncFeeGrowth(user, nextTokenId);
+      await burnRTokens(tokenA.address, tokenB.address, user, nextTokenId);
+      let dataLock = await positionManager.antiSnipAttackData(nextTokenId);
+      expect(dataLock.feesLocked.toNumber()).to.be.eq(832);
+      await setNextBlockTimestampFromCurrent(vestingPeriod + 5);
+      await syncFeeGrowth(user, nextTokenId);
+      let dataLock1 = await positionManager.antiSnipAttackData(nextTokenId);
+      expect(dataLock1.feesLocked.toNumber()).to.be.eq(0);
+    });
+
+    it('sync fee growth -> burnRToken and check lock amount 2', async () => {
+      await initLiquidity(other, tokenA.address, tokenB.address);
+      for (let j = 0; j < 5; j++) {
+        await swapExactInput(tokenA.address, tokenB.address, swapFeeUnitsArray[0], BN.from(170000 * (j + 1)));
+        await swapExactInput(tokenB.address, tokenA.address, swapFeeUnitsArray[0], BN.from(130000 * (j + 1)));
+      }
+      await syncFeeGrowth(other, nextTokenId);
+      await burnRTokens(tokenA.address, tokenB.address, other, nextTokenId);
+      let dataLock = await positionManager.antiSnipAttackData(nextTokenId);
+      expect(dataLock.feesLocked.toNumber()).to.be.eq(996);
+      await setNextBlockTimestampFromCurrent(vestingPeriod + 5);
+      await syncFeeGrowth(other, nextTokenId);
+      let dataLock1 = await positionManager.antiSnipAttackData(nextTokenId);
+      expect(dataLock1.feesLocked.toNumber()).to.be.eq(0);
+    });
+
   });
 });
 
