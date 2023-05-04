@@ -8,12 +8,10 @@ import {
   AntiSnipAttackPositionManager__factory,
   Factory__factory,
   Factory,
-  MockTokenPositionDescriptor__factory,
   QuoterV2__factory,
   Router__factory,
   Router,
   QuoterV2,
-  MockTokenPositionDescriptor,
   AntiSnipAttackPositionManager,
   BasePositionManager__factory,
   BasePositionManager,
@@ -37,15 +35,16 @@ let admin: string;
 let weth: string;
 let vestingPeriod: number;
 let baseDescriptor: string;
+let baseDescriptorImpl: string
+let poolOracleAddress: string;
+let poolOracleImpl: string
 let enableWhitelist: boolean;
 let deployQuoter: string;
 let outputFilename: string;
 
-let poolOralce: PoolOracle;
 let factory: Factory;
 let router: Router;
 let quoter: QuoterV2;
-let descriptor: MockTokenPositionDescriptor;
 let posManager: AntiSnipAttackPositionManager | BasePositionManager;
 let ticksFeesReader: TicksFeesReader;
 
@@ -61,21 +60,34 @@ task('deployElastic', 'deploy router, factory and position manager')
     const [deployer] = await hre.ethers.getSigners();
     deployerAddress = await deployer.getAddress();
     console.log(`Deployer address: ${deployerAddress}`);
-
-    let outputData: any = {};
     gasPrice = BN.from(10 ** 9 * taskArgs.gasprice);
     console.log(`Deploy gas price: ${gasPrice.toString()} (${taskArgs.gasprice} gwei)`);
 
-    console.log(`deploying pool oracle...`);
-    const PoolOracle = (await hre.ethers.getContractFactory('PoolOracle')) as PoolOracle__factory;
-    poolOralce = await PoolOracle.deploy({gasPrice: gasPrice});
-    await poolOralce.deployed();
-    console.log(`pool oracle address: ${poolOralce.address}`);
-    outputData['poolOracle'] = poolOralce.address;
+    let outputData: any = {};
+
+    if (poolOracleAddress == '' || poolOracleAddress == undefined) {
+      console.log(`deploying pool oracle...`);
+
+      const PoolOracle = await hre.ethers.getContractFactory('PoolOracle');
+      let poolOracleProxy = await hre.upgrades.deployProxy(PoolOracle, [], {
+        initializer: 'initialize',
+      });
+      await poolOracleProxy.deployed();
+      const poolOracle = await hre.upgrades.erc1967.getImplementationAddress(poolOracleProxy.address);
+
+      console.log('PoolOracleProxy deployed to:', poolOracleProxy.address);
+      console.log('PoolOracleImpl deployed to:', poolOracleImpl);
+      outputData['poolOracleProxy'] = poolOracleProxy.address;
+      outputData['poolOracleImpl'] = poolOracle;
+      poolOracleAddress = poolOracleProxy.address;
+      poolOracleImpl = poolOracle;
+    } else {
+      console.log(`pool oracle address: ${poolOracleAddress}`);
+    }
 
     console.log(`deploying factory...`);
     const Factory = (await hre.ethers.getContractFactory('Factory')) as Factory__factory;
-    factory = await Factory.deploy(vestingPeriod, poolOralce.address, {gasPrice: gasPrice});
+    factory = await Factory.deploy(vestingPeriod, poolOracleAddress, {gasPrice: gasPrice});
     await factory.deployed();
     console.log(`factory address: ${factory.address}`);
     outputData['factory'] = factory.address;
@@ -96,16 +108,26 @@ task('deployElastic', 'deploy router, factory and position manager')
       outputData['quoter'] = quoter.address;
     }
 
-    if (baseDescriptor == '') {
-      console.log(`deploying MockTokenPositionDescriptor...`);
-      const Descriptor = (await hre.ethers.getContractFactory(
-        'MockTokenPositionDescriptor'
-      )) as MockTokenPositionDescriptor__factory;
-      descriptor = await Descriptor.deploy();
-      await descriptor.deployed();
-      baseDescriptor = descriptor.address;
-      console.log(`descriptor address: ${baseDescriptor}`);
-      outputData['mockDescriptor'] = baseDescriptor;
+    if (baseDescriptor == '' || baseDescriptor == undefined) {
+      const TokenPositionDescriptor = await hre.ethers.getContractFactory('TokenPositionDescriptor');
+      let descriptorProxy = await hre.upgrades.deployProxy(TokenPositionDescriptor, [], {
+        initializer: 'initialize',
+      });
+
+      await descriptorProxy.deployed();
+
+      const descriptorAddress = await hre.upgrades.erc1967.getImplementationAddress(descriptorProxy.address);
+
+      console.log('TokenPositionDescriptorProxy deployed to:', descriptorProxy.address);
+      console.log('TokenPositionDescriptor deployed to:', descriptorAddress);
+
+      outputData['descriptorProxy'] = descriptorProxy.address;
+      outputData['descriptor'] = descriptorAddress;
+      baseDescriptor = descriptorProxy.address;
+      baseDescriptorImpl = descriptorAddress;
+    } else {
+      outputData['descriptorProxy'] = baseDescriptor;
+      console.log(`baseDescriptor address: ${baseDescriptor}`);
     }
 
     enableWhitelist = vestingPeriod != 0;
@@ -133,8 +155,16 @@ task('deployElastic', 'deploy router, factory and position manager')
     outputData['posManager'] = posManager.address;
 
     // transfer ownership to admin
-    console.log(`updating config master...`);
-    await factory.updateConfigMaster(admin, {gasPrice: gasPrice});
+    if (admin != '') {
+      console.log(`updating config master...`);
+      await factory.updateConfigMaster(admin, {gasPrice: gasPrice});
+    }
+    let feeUnits = [20, 100, 250, 2000, 5000]
+    let tickDistances = [2, 10, 25, 100, 100]
+    for (let i = 0; i < feeUnits.length; i++) {
+      console.log(`Enable swap fee ${feeUnits[i]} with tick distance ${tickDistances[i]}`)
+      await factory.enableSwapFee(feeUnits[i], tickDistances[i]);
+    }
 
     console.log(`deploying tick and fees helper...`);
     const TicksFeesReader = (await hre.ethers.getContractFactory(
@@ -151,7 +181,8 @@ task('deployElastic', 'deploy router, factory and position manager')
     console.log('verifying addresses...');
     await verifyContract(hre, factory.address, [vestingPeriod]);
     await verifyContract(hre, router.address, [factory.address, weth]);
-    if (descriptor) await verifyContract(hre, descriptor.address, []);
+    if (baseDescriptorImpl) await verifyContract(hre, baseDescriptorImpl, []);
+    if (poolOracleImpl) await verifyContract(hre, poolOracleImpl, []);
     if (deployQuoter) await verifyContract(hre, quoter.address, [factory.address]);
     await verifyContract(hre, posManager.address, [factory.address, weth, baseDescriptor]);
     await verifyContract(hre, ticksFeesReader.address, []);
@@ -165,6 +196,7 @@ function parseInput(jsonInput: any) {
   vestingPeriod = jsonInput['vestingPeriod'];
   weth = jsonInput['weth'];
   baseDescriptor = jsonInput['baseDescriptor'];
+  poolOracleAddress = jsonInput['poolOracle'];
   deployQuoter = jsonInput['deployQuoter'];
   outputFilename = jsonInput['outputFilename'];
 }
