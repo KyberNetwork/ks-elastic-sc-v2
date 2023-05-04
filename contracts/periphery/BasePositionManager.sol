@@ -163,7 +163,12 @@ contract BasePositionManager is
 
     uint128 tmpLiquidity = pos.liquidity;
 
-    additionalRTokenOwed = _updateRTokenOwedAndFeeGrowth(params.tokenId, pos.feeGrowthInsideLast, feeGrowthInsideLast, tmpLiquidity);
+    additionalRTokenOwed = _updateRTokenOwedAndFeeGrowth(
+      params.tokenId,
+      pos.feeGrowthInsideLast,
+      feeGrowthInsideLast,
+      tmpLiquidity
+    );
 
     pos.liquidity = tmpLiquidity + liquidity;
 
@@ -197,14 +202,25 @@ contract BasePositionManager is
     );
     require(amount0 >= params.amount0Min && amount1 >= params.amount1Min, 'Low return amounts');
 
-    additionalRTokenOwed = _updateRTokenOwedAndFeeGrowth(params.tokenId, pos.feeGrowthInsideLast, feeGrowthInsideLast, tmpLiquidity);
+    additionalRTokenOwed = _updateRTokenOwedAndFeeGrowth(
+      params.tokenId,
+      pos.feeGrowthInsideLast,
+      feeGrowthInsideLast,
+      tmpLiquidity
+    );
 
     pos.liquidity = tmpLiquidity - params.liquidity;
 
     emit RemoveLiquidity(params.tokenId, params.liquidity, amount0, amount1, additionalRTokenOwed);
   }
 
-  function syncFeeGrowth(uint256 tokenId) external override returns(uint256 additionalRTokenOwed){
+  function syncFeeGrowth(uint256 tokenId)
+    external
+    virtual
+    override
+    isAuthorizedForToken(tokenId)
+    returns(uint256 additionalRTokenOwed)
+  {
     Position storage pos = _positions[tokenId];
 
     PoolInfo memory poolInfo = _poolInfoById[pos.poolId];
@@ -215,7 +231,12 @@ contract BasePositionManager is
       pos.tickUpper
     );
 
-    additionalRTokenOwed = _updateRTokenOwedAndFeeGrowth(tokenId, pos.feeGrowthInsideLast, feeGrowthInsideLast, pos.liquidity);
+    additionalRTokenOwed = _updateRTokenOwedAndFeeGrowth(
+      tokenId,
+      pos.feeGrowthInsideLast,
+      feeGrowthInsideLast,
+      pos.liquidity
+    );
     emit SyncFeeGrowth(tokenId, additionalRTokenOwed);
   }
 
@@ -310,18 +331,22 @@ contract BasePositionManager is
       super.supportsInterface(interfaceId);
   }
 
-  function _updateRTokenOwedAndFeeGrowth(uint256 tokenId, uint256 oldFee, uint256 newFee, uint256 liq)
+  function _updateRTokenOwedAndFeeGrowth(
+    uint256 tokenId,
+    uint256 feeGrowthOld,
+    uint256 feeGrowthNew,
+    uint128 liquidity)
     internal
     returns (uint256 additionalRTokenOwed) 
   {
-    if (newFee != oldFee) {
+    if (feeGrowthNew != feeGrowthOld) {
       uint256 feeGrowthInsideDiff;
       unchecked {
-        feeGrowthInsideDiff = newFee - oldFee;
+        feeGrowthInsideDiff = feeGrowthNew - feeGrowthOld;
       }
-      additionalRTokenOwed = FullMath.mulDivFloor(liq, feeGrowthInsideDiff, C.TWO_POW_96);
+      additionalRTokenOwed = FullMath.mulDivFloor(liquidity, feeGrowthInsideDiff, C.TWO_POW_96);
       _positions[tokenId].rTokenOwed += additionalRTokenOwed;
-      _positions[tokenId].feeGrowthInsideLast = newFee;
+      _positions[tokenId].feeGrowthInsideLast = feeGrowthNew;
     }
   }
 

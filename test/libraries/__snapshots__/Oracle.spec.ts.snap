@@ -1,0 +1,29 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Oracle #observe initialized with 5 observations with starting time of 5 fetch many values 1`] = `
+Object {
+  "tickCumulatives": Array [
+    -13,
+    -31,
+    -43,
+    -37,
+    -15,
+    9,
+    15,
+  ],
+}
+`;
+
+exports[`Oracle #observe initialized with 5 observations with starting time of 4294967291 fetch many values 1`] = `
+Object {
+  "tickCumulatives": Array [
+    -13,
+    -31,
+    -43,
+    -37,
+    -15,
+    9,
+    15,
+  ],
+}
+`;
