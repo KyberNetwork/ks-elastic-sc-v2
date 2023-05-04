@@ -682,7 +682,7 @@ describe('QuoterV2', function () {
 
       it('quoteExactOutputSingle without limit', async () => {
         const [amountOut, token0, token1, balToken0, balToken1] = [
-          BN.from('786517838847352'),
+          BN.from(2).pow(BN.from(32)),
           tokens[0],
           tokens[2],
           await tokens[0].balanceOf(wallet.address),

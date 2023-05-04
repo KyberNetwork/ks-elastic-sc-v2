@@ -38,7 +38,7 @@ describe.skip('Pool', () => {
   const [user, admin] = waffle.provider.getWallets();
 
   async function fixture(): Promise<Fixtures> {
-    let factory = await deployMockFactory(admin, vestingPeriod);
+    let [factory, oracle] = await deployMockFactory(admin, vestingPeriod);
     const PoolContract = (await ethers.getContractFactory('MockPool')) as MockPool__factory;
 
     await factory.connect(admin).enableSwapFee(swapFeeUnits, tickDistance);
