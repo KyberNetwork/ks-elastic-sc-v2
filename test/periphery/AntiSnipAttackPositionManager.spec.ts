@@ -21,11 +21,15 @@ import {
   MockTokenPositionDescriptor__factory,
   MockSnipAttack,
   MockSnipAttack__factory,
+  TicksFeesReader,
+  MockAntiSnipAttack,
+  TicksFeesReader__factory,
+  MockAntiSnipAttack__factory,
 } from '../../typechain';
 
 import {deployFactory} from '../helpers/setup';
-import {snapshot, revertToSnapshot, setNextBlockTimestampFromCurrent} from '../helpers/hardhat';
-import {BN, PRECISION, ZERO_ADDRESS, ZERO, MIN_TICK, ONE} from '../helpers/helper';
+import {snapshot, revertToSnapshot, setNextBlockTimestampFromCurrent, getLatestBlockTime} from '../helpers/hardhat';
+import {BN, PRECISION, ZERO_ADDRESS, ZERO, MIN_TICK, ONE, FEE_UNITS} from '../helpers/helper';
 import {encodePriceSqrt, sortTokens, orderTokens} from '../helpers/utils';
 
 const showTxGasUsed = true;
@@ -50,7 +54,6 @@ let vestingPeriod = 1000;
 let initialPrice: BigNumber;
 let snapshotId: any;
 let initialSnapshotId: any;
-
 
 describe('AntiSnipAttackPositionManager', () => {
   const [user, admin, other] = waffle.provider.getWallets();
@@ -214,7 +217,7 @@ describe('AntiSnipAttackPositionManager', () => {
     });
   });
 
-  const initLiquidity = async (user: Wallet, token0: string, token1: string) => {
+  const initLiquidity = async (user: Wallet, token0: string, token1: string, amount = 1000000) => {
     [token0, token1] = sortTokens(token0, token1);
     await positionManager.connect(user).mint({
       token0: token0,
@@ -223,8 +226,8 @@ describe('AntiSnipAttackPositionManager', () => {
       tickLower: -100 * tickDistanceArray[0],
       tickUpper: 100 * tickDistanceArray[0],
       ticksPrevious: ticksPrevious,
-      amount0Desired: BN.from(100000000),
-      amount1Desired: BN.from(100000000),
+      amount0Desired: BN.from(amount),
+      amount1Desired: BN.from(amount),
       amount0Min: 0,
       amount1Min: 0,
       recipient: user.address,
@@ -268,10 +271,7 @@ describe('AntiSnipAttackPositionManager', () => {
     return tx;
   };
 
-  const syncFeeGrowth = async function (
-    user: Wallet,
-    tokenId: BigNumber
-  ): Promise<ContractTransaction> {
+  const syncFeeGrowth = async function (user: Wallet, tokenId: BigNumber): Promise<ContractTransaction> {
     let tx = await positionManager.connect(user).syncFeeGrowth(tokenId);
     return tx;
   };
@@ -519,7 +519,7 @@ describe('AntiSnipAttackPositionManager', () => {
     });
 
     it('should have burnable tokens if liquidity removal happens during vesting period for fresh position', async () => {
-      await initLiquidity(user, tokenA.address, tokenB.address);
+      await initLiquidity(user, tokenA.address, tokenB.address, 100000000);
 
       let gasUsed = ZERO;
       let numRuns = 3;
@@ -628,6 +628,9 @@ describe('AntiSnipAttackPositionManager', () => {
   });
 
   describe(`#sync fee growth`, async () => {
+    let ticksFeesReader: TicksFeesReader;
+    let antiSnipAttack: MockAntiSnipAttack;
+
     before('create and unlock pools', async () => {
       await revertToSnapshot(initialSnapshotId);
       initialSnapshotId = await snapshot();
@@ -639,6 +642,14 @@ describe('AntiSnipAttackPositionManager', () => {
       await revertToSnapshot(snapshotId);
       snapshotId = await snapshot();
       nextTokenId = await positionManager.nextTokenId();
+
+      const TicksFeesReaderFactory = (await ethers.getContractFactory('TicksFeesReader')) as TicksFeesReader__factory;
+      ticksFeesReader = await TicksFeesReaderFactory.deploy();
+
+      const antiSnipAttackFactory = (await ethers.getContractFactory(
+        'MockAntiSnipAttack'
+      )) as MockAntiSnipAttack__factory;
+      antiSnipAttack = await antiSnipAttackFactory.deploy();
     });
 
     it('revert sync fee growth author', async () => {
@@ -650,7 +661,7 @@ describe('AntiSnipAttackPositionManager', () => {
       let numRuns = 2;
 
       for (let i = 0; i < numRuns; i++) {
-        let sender = users[(i+1) % 2];
+        let sender = users[(i + 1) % 2];
         let tokenId = tokenIds[i % 2];
 
         // made some swaps to get fees
@@ -659,22 +670,43 @@ describe('AntiSnipAttackPositionManager', () => {
           await swapExactInput(tokenB.address, tokenA.address, swapFeeUnitsArray[0], BN.from(150000 * (j + 1)));
         }
 
-        await expect(
-          positionManager.connect(sender).syncFeeGrowth(tokenId)
-        ).to.be.revertedWith('Not approved');
+        await expect(positionManager.connect(sender).syncFeeGrowth(tokenId)).to.be.revertedWith('Not approved');
       }
     });
 
     it('sync fee growth -> burnRToken and check lock amount', async () => {
+      let pool = await factory.getPool(tokenA.address, tokenB.address, swapFeeUnitsArray[0]);
+
       await initLiquidity(user, tokenA.address, tokenB.address);
       for (let j = 0; j < 5; j++) {
         await swapExactInput(tokenA.address, tokenB.address, swapFeeUnitsArray[0], BN.from(100000 * (j + 1)));
         await swapExactInput(tokenB.address, tokenA.address, swapFeeUnitsArray[0], BN.from(150000 * (j + 1)));
       }
+
+      let rTokenOwned = await ticksFeesReader.getTotalRTokensOwedToPosition(
+        positionManager.address,
+        pool,
+        nextTokenId
+      );
+      let antiSnipAttackData = await positionManager.antiSnipAttackData(nextTokenId);
+
+      let deltaTime = (await getLatestBlockTime()) + 10 - antiSnipAttackData.lockTime;
+      let feesClaimableSinceLastActionFeeUnits = Math.min(FEE_UNITS, (deltaTime * FEE_UNITS) / vestingPeriod);
+
+      let dataLockShouldBe = await antiSnipAttack.calcFeeProportions(
+        antiSnipAttackData.feesLocked,
+        rTokenOwned.toNumber(),
+        100000,
+        feesClaimableSinceLastActionFeeUnits
+      );
+
+      await setNextBlockTimestampFromCurrent(10);
       await syncFeeGrowth(user, nextTokenId);
+
       await burnRTokens(tokenA.address, tokenB.address, user, nextTokenId);
       let dataLock = await positionManager.antiSnipAttackData(nextTokenId);
-      expect(dataLock.feesLocked.toNumber()).to.be.eq(832);
+
+      expect(dataLock.feesLocked).to.be.eq(dataLockShouldBe.feesLockedNew);
       await setNextBlockTimestampFromCurrent(vestingPeriod + 5);
       await syncFeeGrowth(user, nextTokenId);
       let dataLock1 = await positionManager.antiSnipAttackData(nextTokenId);
@@ -682,21 +714,42 @@ describe('AntiSnipAttackPositionManager', () => {
     });
 
     it('sync fee growth -> burnRToken and check lock amount 2', async () => {
+      let pool = await factory.getPool(tokenA.address, tokenB.address, swapFeeUnitsArray[0]);
+
       await initLiquidity(other, tokenA.address, tokenB.address);
       for (let j = 0; j < 5; j++) {
         await swapExactInput(tokenA.address, tokenB.address, swapFeeUnitsArray[0], BN.from(170000 * (j + 1)));
         await swapExactInput(tokenB.address, tokenA.address, swapFeeUnitsArray[0], BN.from(130000 * (j + 1)));
       }
+
+      let rTokenOwned = await ticksFeesReader.getTotalRTokensOwedToPosition(
+        positionManager.address,
+        pool,
+        nextTokenId
+      );
+      let antiSnipAttackData = await positionManager.antiSnipAttackData(nextTokenId);
+
+      let deltaTime = (await getLatestBlockTime()) + 10 - antiSnipAttackData.lockTime;
+      let feesClaimableSinceLastActionFeeUnits = Math.min(FEE_UNITS, (deltaTime * FEE_UNITS) / vestingPeriod);
+
+      let dataLockShouldBe = await antiSnipAttack.calcFeeProportions(
+        antiSnipAttackData.feesLocked,
+        rTokenOwned.toNumber(),
+        100000,
+        feesClaimableSinceLastActionFeeUnits
+      );
+
+      await setNextBlockTimestampFromCurrent(10);
+
       await syncFeeGrowth(other, nextTokenId);
       await burnRTokens(tokenA.address, tokenB.address, other, nextTokenId);
       let dataLock = await positionManager.antiSnipAttackData(nextTokenId);
-      expect(dataLock.feesLocked.toNumber()).to.be.eq(996);
+      expect(dataLock.feesLocked).to.be.eq(dataLockShouldBe.feesLockedNew);
       await setNextBlockTimestampFromCurrent(vestingPeriod + 5);
       await syncFeeGrowth(other, nextTokenId);
       let dataLock1 = await positionManager.antiSnipAttackData(nextTokenId);
       expect(dataLock1.feesLocked.toNumber()).to.be.eq(0);
     });
-
   });
 });
 

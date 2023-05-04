@@ -18,6 +18,10 @@ import {
   Pool,
   MockTokenPositionDescriptor,
   MockTokenPositionDescriptor__factory,
+  MockLiquidityMath__factory,
+  MockTickMath__factory,
+  MockQtyDeltaMath__factory,
+  TicksFeesReader__factory,
 } from '../../typechain';
 
 import {deployFactory, getTicksPrevious} from '../helpers/setup';
@@ -782,10 +786,7 @@ describe('BasePositionManager', () => {
     return tx;
   };
 
-  const syncFeeGrowth = async function (
-    user: Wallet,
-    tokenId: BigNumber
-  ): Promise<ContractTransaction> {
+  const syncFeeGrowth = async function (user: Wallet, tokenId: BigNumber): Promise<ContractTransaction> {
     let tx = await positionManager.connect(user).syncFeeGrowth(tokenId);
     return tx;
   };
@@ -870,6 +871,7 @@ describe('BasePositionManager', () => {
     it('add liquidity with tokens - no new fees', async () => {
       await initLiquidity(user, tokenA.address, tokenB.address);
       await initLiquidity(other, tokenA.address, tokenB.address);
+
       let pool = await factory.getPool(tokenA.address, tokenB.address, swapFeeUnitsArray[0]);
       let poolContract = (await ethers.getContractAt('Pool', pool)) as Pool;
 
@@ -945,14 +947,24 @@ describe('BasePositionManager', () => {
       let pool = await factory.getPool(tokenA.address, tokenB.address, swapFeeUnitsArray[0]);
       let poolContract = (await ethers.getContractAt('Pool', pool)) as Pool;
 
+      const liquidityMathFactory = (await ethers.getContractFactory(
+        'MockLiquidityMath'
+      )) as MockLiquidityMath__factory;
+      let liquidityMath = await liquidityMathFactory.deploy();
+
+      const tickMathFactory = (await ethers.getContractFactory('MockTickMath')) as MockTickMath__factory;
+      let tickMath = await tickMathFactory.deploy();
+
+      const qtyDeltaMathFactory = (await ethers.getContractFactory('MockQtyDeltaMath')) as MockQtyDeltaMath__factory;
+      let qtyDeltaMath = await qtyDeltaMathFactory.deploy();
+
+      const TicksFeesReaderFactory = (await ethers.getContractFactory('TicksFeesReader')) as TicksFeesReader__factory;
+      let ticksFeesReader = await TicksFeesReaderFactory.deploy();
+
       let users = [user, other];
       let tokenIds = [nextTokenId, nextTokenId.add(1)];
       let gasUsed = BN.from(0);
       let numRuns = 5;
-      let liquidityDesired = [1795547, 2894569, 3713647, 4798240, 5997800];
-      let amount0Desired = [55707, 45590, 10438, 0, 0];
-      let amount1Desired = [120000, 240000, 360000, 480000, 600000];
-      let additionalRTokenOwedDesired = [420, 820, 841, 747, 618];
 
       for (let i = 0; i < numRuns; i++) {
         let sender = users[i % 2];
@@ -975,6 +987,35 @@ describe('BasePositionManager', () => {
         let userBalBefore = await getBalances(sender.address, [tokenA.address, tokenB.address]);
         let poolBalBefore = await getBalances(pool, [tokenA.address, tokenB.address]);
 
+        let [currentSqrtP, , ,] = await poolContract.getPoolState();
+        let lowerSqrtP = await tickMath.getSqrtRatioAtTick(userData.pos.tickLower);
+        let upperSqrtP = await tickMath.getSqrtRatioAtTick(userData.pos.tickUpper);
+
+        const liquidity = await liquidityMath.getLiquidityFromQties(
+          currentSqrtP,
+          lowerSqrtP,
+          upperSqrtP,
+          amount0,
+          amount1
+        );
+
+        let qty0: BigNumber;
+        let qty1: BigNumber;
+
+        if (currentSqrtP < lowerSqrtP) {
+          qty0 = 0;
+          qty1 = await qtyDeltaMath.calcRequiredQty0(lowerSqrtP, upperSqrtP, liquidity, true);
+        } else if (currentSqrtP >= upperSqrtP) {
+          qty0 = await qtyDeltaMath.calcRequiredQty0(lowerSqrtP, upperSqrtP, liquidity, true);
+          qty1 = 0;
+        } else {
+          qty0 = await qtyDeltaMath.calcRequiredQty0(currentSqrtP, upperSqrtP, liquidity, true);
+          qty1 = await qtyDeltaMath.calcRequiredQty1(lowerSqrtP, currentSqrtP, liquidity, true);
+        }
+
+        let rTokenOwned = await ticksFeesReader.getTotalRTokensOwedToPosition(positionManager.address, pool, tokenId);
+        let expectedAdditionalRTokenOwed = rTokenOwned.sub(userData.pos.rTokenOwed);
+
         let tx;
         await expect(
           (tx = await positionManager.connect(sender).addLiquidity({
@@ -987,14 +1028,7 @@ describe('BasePositionManager', () => {
           }))
         )
           .to.be.emit(positionManager, 'AddLiquidity')
-          .withArgs(
-            tokenId,
-            liquidityDesired[i],
-            amount0Desired[i],
-            amount1Desired[i],
-            additionalRTokenOwedDesired[i]
-          );
-
+          .withArgs(tokenId, liquidity, qty0, qty1, expectedAdditionalRTokenOwed);
         gasUsed = gasUsed.add((await tx.wait()).gasUsed);
 
         // verify balance
@@ -1192,13 +1226,19 @@ describe('BasePositionManager', () => {
       let pool = await factory.getPool(tokenA.address, tokenB.address, swapFeeUnitsArray[0]);
       let poolContract = (await ethers.getContractAt('Pool', pool)) as Pool;
 
+      const tickMathFactory = (await ethers.getContractFactory('MockTickMath')) as MockTickMath__factory;
+      let tickMath = await tickMathFactory.deploy();
+
+      const qtyDeltaMathFactory = (await ethers.getContractFactory('MockQtyDeltaMath')) as MockQtyDeltaMath__factory;
+      let qtyDeltaMath = await qtyDeltaMathFactory.deploy();
+
+      const TicksFeesReaderFactory = (await ethers.getContractFactory('TicksFeesReader')) as TicksFeesReader__factory;
+      let ticksFeesReader = await TicksFeesReaderFactory.deploy();
+
       let users = [user, other];
       let tokenIds = [nextTokenId, nextTokenId.add(1)];
       let gasUsed = BN.from(0);
       let numRuns = 5;
-      let amount0Desired = [3, 3, 0, 0, 0];
-      let amount1Desired = [6, 16, 29, 40, 50];
-      let additionalRTokenOwedDesired = [420, 838, 834, 726, 581];
 
       for (let i = 0; i < numRuns; i++) {
         let sender = users[i % 2];
@@ -1219,11 +1259,33 @@ describe('BasePositionManager', () => {
         let userBalBefore = await getBalances(sender.address, [tokenA.address, tokenB.address]);
         let poolBalBefore = await getBalances(pool, [tokenA.address, tokenB.address]);
 
+        let [currentSqrtP, , ,] = await poolContract.getPoolState();
+        let lowerSqrtP = await tickMath.getSqrtRatioAtTick(userData.pos.tickLower);
+        let upperSqrtP = await tickMath.getSqrtRatioAtTick(userData.pos.tickUpper);
+
         let liquidity = BN.from((i + 1) * 100);
+
+        let qty0: BigNumber;
+        let qty1: BigNumber;
+
+        if (currentSqrtP < lowerSqrtP) {
+          qty0 = 0;
+          qty1 = (await qtyDeltaMath.calcRequiredQty0(lowerSqrtP, upperSqrtP, liquidity, false)).mul(-1);
+        } else if (currentSqrtP >= upperSqrtP) {
+          qty0 = (await qtyDeltaMath.calcRequiredQty0(lowerSqrtP, upperSqrtP, liquidity, false)).mul(-1);
+          qty1 = 0;
+        } else {
+          qty0 = (await qtyDeltaMath.calcRequiredQty0(currentSqrtP, upperSqrtP, liquidity, false)).mul(-1);
+          qty1 = (await qtyDeltaMath.calcRequiredQty1(lowerSqrtP, currentSqrtP, liquidity, false)).mul(-1);
+        }
+
+        let rTokenOwned = await ticksFeesReader.getTotalRTokensOwedToPosition(positionManager.address, pool, tokenId);
+        let expectedAdditionalRTokenOwed = rTokenOwned.sub(userData.pos.rTokenOwed);
+
         let tx;
         await expect((tx = await removeLiquidity(tokenA.address, tokenB.address, sender, tokenId, liquidity)))
           .to.be.emit(positionManager, 'RemoveLiquidity')
-          .withArgs(tokenId, liquidity, amount0Desired[i], amount1Desired[i], additionalRTokenOwedDesired[i]);
+          .withArgs(tokenId, liquidity, qty0, qty1, expectedAdditionalRTokenOwed);
 
         gasUsed = gasUsed.add((await tx.wait()).gasUsed);
 
@@ -1558,7 +1620,6 @@ describe('BasePositionManager', () => {
         expect(userData.pos.rTokenOwed).to.be.eq(rTokenBefore.tokenBalances[0].sub(rTokenBalAfter.tokenBalances[0]));
       }
     });
-
   });
 
   describe(`#burn token`, async () => {
