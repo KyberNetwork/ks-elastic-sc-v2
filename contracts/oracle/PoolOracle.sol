@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.9;
 
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import {IERC20Upgradeable} from '@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol';
+import {SafeERC20Upgradeable} from '@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol';
 
 import {Initializable} from '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
 import {UUPSUpgradeable} from '@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol';
@@ -19,7 +19,7 @@ contract PoolOracle is
   UUPSUpgradeable,
   OwnableUpgradeable
 {
-  using SafeERC20 for IERC20;
+  using SafeERC20Upgradeable for IERC20Upgradeable;
   using Oracle for Oracle.Observation[65535];
 
   struct ObservationData {
@@ -47,7 +47,7 @@ contract PoolOracle is
       (bool success, ) = payable(owner()).call{value: amount}('');
       require(success, "failed to collect native");
     } else {
-      IERC20(token).safeTransfer(owner(), amount);
+      IERC20Upgradeable(token).safeTransfer(owner(), amount);
     }
     emit OwnerWithdrew(owner(), token, amount);
   }
