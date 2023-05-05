@@ -27,7 +27,7 @@ import {
   MockAntiSnipAttack__factory,
 } from '../../typechain';
 
-import {deployFactory} from '../helpers/setup';
+import {deployFactory, getTicksPrevious} from '../helpers/setup';
 import {snapshot, revertToSnapshot, setNextBlockTimestampFromCurrent, getLatestBlockTime} from '../helpers/hardhat';
 import {BN, PRECISION, ZERO_ADDRESS, ZERO, MIN_TICK, ONE, FEE_UNITS} from '../helpers/helper';
 import {encodePriceSqrt, sortTokens, orderTokens} from '../helpers/utils';
@@ -217,22 +217,34 @@ describe('AntiSnipAttackPositionManager', () => {
     });
   });
 
-  const initLiquidity = async (user: Wallet, token0: string, token1: string, amount = 1000000) => {
-    [token0, token1] = sortTokens(token0, token1);
+  const mintPosition = async (
+    user: Wallet, token0: string, token1: string, swapFee: number,
+    ticks: [number, number], ticksPrevious: [BigNumber, BigNumber],
+    amount = 1000000
+  ) => {
     await positionManager.connect(user).mint({
       token0: token0,
       token1: token1,
-      fee: swapFeeUnitsArray[0],
-      tickLower: -100 * tickDistanceArray[0],
-      tickUpper: 100 * tickDistanceArray[0],
+      fee: swapFee,
+      tickLower: ticks[0],
+      tickUpper: ticks[1],
       ticksPrevious: ticksPrevious,
       amount0Desired: BN.from(amount),
       amount1Desired: BN.from(amount),
-      amount0Min: 0,
-      amount1Min: 0,
+      amount0Min: 1,
+      amount1Min: 1,
       recipient: user.address,
       deadline: PRECISION,
     });
+  }
+
+  const initLiquidity = async (user: Wallet, token0: string, token1: string, amount = 1000000) => {
+    [token0, token1] = sortTokens(token0, token1);
+    await mintPosition(
+      user, token0, token1, swapFeeUnitsArray[0],
+      [-100 * tickDistanceArray[0], 100 * tickDistanceArray[0]],
+      ticksPrevious, amount
+    );
   };
 
   const swapExactInput = async function (tokenIn: string, tokenOut: string, poolFee: number, amount: BigNumber) {
@@ -326,6 +338,7 @@ describe('AntiSnipAttackPositionManager', () => {
         await expect(
           (tx = await positionManager.connect(user).addLiquidity({
             tokenId: tokenId,
+            ticksPrevious: [0, 0],
             amount0Desired: amount0,
             amount1Desired: amount1,
             amount0Min: 0,
@@ -370,6 +383,7 @@ describe('AntiSnipAttackPositionManager', () => {
         await expect(
           (tx = await positionManager.connect(user).addLiquidity({
             tokenId: nextTokenId,
+            ticksPrevious: [0, 0],
             amount0Desired: amount0,
             amount1Desired: amount1,
             amount0Min: 0,
@@ -389,6 +403,101 @@ describe('AntiSnipAttackPositionManager', () => {
       if (showTxGasUsed) {
         logMessage(`Average gas use for add liquidity - has new fees: ${gasUsed.div(numRuns).toString()}`);
       }
+    });
+
+    it('add liquidity to a closed position', async () => {
+      // add 2 positions with the same ticks
+      await mintPosition(
+        user, tokenA.address, tokenB.address, swapFeeUnitsArray[0],
+        [-100 * tickDistanceArray[0], 100 * tickDistanceArray[0]],
+        ticksPrevious, 100000
+      );
+      await mintPosition(
+        other, tokenA.address, tokenB.address, swapFeeUnitsArray[0],
+        [-100 * tickDistanceArray[0], 100 * tickDistanceArray[0]],
+        ticksPrevious, 100000
+      );
+      // ### Remove all liquidity and re-add, ticks are not de-initialized
+      let position0 = await positionManager.positions(nextTokenId);
+      await positionManager.connect(user).removeLiquidity({
+        tokenId: nextTokenId, liquidity: position0[0].liquidity, amount0Min: 1, amount1Min: 1, deadline: PRECISION,
+      });
+      position0 = await positionManager.positions(nextTokenId);
+      expect(position0[0].liquidity).to.be.eq(0);
+      // verify ticks are not de-initialized
+      let poolAddress = await factory.getPool(tokenA.address, tokenB.address, swapFeeUnitsArray[0]);
+      let pool = (await ethers.getContractAt('Pool', poolAddress)) as Pool;
+      let tickData = await pool.initializedTicks(position0[0].tickLower);
+      expect(tickData[0]).to.be.not.eq(tickData[1]);
+      tickData = await pool.initializedTicks(position0[0].tickUpper);
+      expect(tickData[0]).to.be.not.eq(tickData[1]);
+      // add liquidity again to the closed position
+      await positionManager.connect(user).addLiquidity({
+        tokenId: nextTokenId,
+        ticksPrevious: [0, 0],
+        amount0Desired: 200000,
+        amount1Desired: 200000,
+        amount0Min: 1,
+        amount1Min: 1,
+        deadline: PRECISION,
+      });
+      position0 = await positionManager.positions(nextTokenId);
+      expect(position0[0].liquidity).to.be.not.eq(0);
+    });
+
+    it('add liquidity to a closed position, both ticks are de-initialized', async () => {
+      // add 2 positions with the same ticks
+      await mintPosition(
+        user, tokenA.address, tokenB.address, swapFeeUnitsArray[0],
+        [-100 * tickDistanceArray[0], 100 * tickDistanceArray[0]],
+        ticksPrevious, 100000
+      );
+      await mintPosition(
+        other, tokenA.address, tokenB.address, swapFeeUnitsArray[0],
+        [-200 * tickDistanceArray[0], 200 * tickDistanceArray[0]],
+        ticksPrevious, 100000
+      );
+      // remove all liquidity from the first position, upper tick is de-initialized
+      let position0 = await positionManager.positions(nextTokenId);
+      await positionManager.connect(user).removeLiquidity({
+        tokenId: nextTokenId, liquidity: position0[0].liquidity, amount0Min: 1, amount1Min: 1, deadline: PRECISION,
+      });
+      position0 = await positionManager.positions(nextTokenId);
+      expect(position0[0].liquidity).to.be.eq(0);
+      // verify lower tick is de-initialized
+      let poolAddress = await factory.getPool(tokenA.address, tokenB.address, swapFeeUnitsArray[0]);
+      let pool = (await ethers.getContractAt('Pool', poolAddress)) as Pool;
+      let tickData = await pool.initializedTicks(position0[0].tickLower);
+      expect(tickData[0]).to.be.eq(tickData[1]);
+      tickData = await pool.initializedTicks(position0[0].tickUpper);
+      expect(tickData[0]).to.be.eq(tickData[1]);
+      // add liquidity again to the closed position, it should be reverted as tick previous is not initialized
+      await expect(positionManager.connect(user).addLiquidity({
+        tokenId: nextTokenId,
+        ticksPrevious: [position0[0].tickLower, position0[0].tickUpper],
+        amount0Desired: 200000,
+        amount1Desired: 200000,
+        amount0Min: 1,
+        amount1Min: 1,
+        deadline: PRECISION,
+      })).to.be.revertedWith('previous tick has been removed');
+      position0 = await positionManager.positions(0);
+      expect(position0[0].liquidity).to.be.eq(0);
+      // add liquidity again with correct initialized tick previous
+      let _ticksPrevious = await getTicksPrevious(pool, position0[0].tickLower, position0[0].tickUpper);
+      await positionManager.connect(user).addLiquidity({
+        tokenId: nextTokenId,
+        ticksPrevious: _ticksPrevious,
+        amount0Desired: 200000,
+        amount1Desired: 200000,
+        amount0Min: 1,
+        amount1Min: 1,
+        deadline: PRECISION,
+      });
+      position0 = await positionManager.positions(nextTokenId);
+      expect(position0[0].liquidity).to.be.not.eq(0);
+      tickData = await pool.initializedTicks(position0[0].tickLower);
+      expect(tickData[0]).to.be.not.eq(tickData[1]);
     });
   });
 
