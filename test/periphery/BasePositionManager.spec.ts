@@ -1,6 +1,6 @@
 import {ethers, waffle} from 'hardhat';
 import {expect} from 'chai';
-import {Wallet, BigNumber, ContractTransaction} from 'ethers';
+import {Wallet, BigNumber, ContractTransaction, Contract} from 'ethers';
 import chai from 'chai';
 const {solidity} = waffle;
 chai.use(solidity);
@@ -2143,7 +2143,21 @@ describe('BasePositionManager', () => {
       expect(await positionManager.supportsInterface('0x5b5e139f')).to.be.eq(true); // ERC721Metadata
       expect(await positionManager.supportsInterface('0x780e9d63')).to.be.eq(true); // ERC721Enumerable
       expect(await positionManager.supportsInterface('0x7dd42bd6')).to.be.eq(true); // ERC721Permit
-      expect(await positionManager.supportsInterface('0x62FDF299')).to.be.eq(true); // IBasePositionManager
+
+      // 1c49584a
+      // ea540632
+      // 2f45d9b1
+      // 98e04d77
+      // ed0d8dd2
+      // 42966c68
+      // 311e7994
+      // 99fbab88
+      // 4bfe3398
+      // 03a6dab3
+      // 18e56131
+      // 75794a3c
+      // 01ffc9a7
+      expect(await positionManager.supportsInterface('0x8F80888B')).to.be.eq(true); // IBasePositionManager
     });
 
     it('un-support interface', async () => {
