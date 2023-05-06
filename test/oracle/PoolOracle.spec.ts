@@ -5,7 +5,7 @@ import chai from 'chai';
 const {solidity} = waffle;
 chai.use(solidity);
 
-import {PoolOracle, PoolOracle__factory} from '../../typechain';
+import {PoolOracle, PoolOracle__factory, ERC1967Proxy, ERC1967Proxy__factory} from '../../typechain';
 import {MockToken, MockToken__factory} from '../../typechain';
 
 import {snapshot, revertToSnapshot} from '../helpers/hardhat';
@@ -15,6 +15,8 @@ let tokenA: MockToken;
 let PoolOracleContract: PoolOracle__factory
 let poolOracle: PoolOracle
 let defaultLiquidity = BN.from(10);
+const IMPLEMENT_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
+
 
 let snapshotId: any;
 
@@ -26,8 +28,12 @@ describe('PoolOracle', () => {
     tokenA = await Token.deploy('USDC', 'USDC', BN.from(1000000));
     PoolOracleContract = (await ethers.getContractFactory('PoolOracle')) as PoolOracle__factory;
 
-    poolOracle = await PoolOracleContract.connect(admin).deploy();
-    await poolOracle.initialize();
+    const poolOracleLogic = await PoolOracleContract.connect(admin).deploy();
+    const proxy = (await ((await ethers.getContractFactory('ERC1967Proxy')) as ERC1967Proxy__factory)
+      .connect(admin)
+      .deploy(poolOracleLogic.address, poolOracleLogic.interface.encodeFunctionData('initialize'))) as ERC1967Proxy;
+    poolOracle = await ((await ethers.getContractFactory('PoolOracle')) as PoolOracle__factory).attach(proxy.address);
+    
     expect(await poolOracle.owner()).to.be.eq(admin.address);
 
     snapshotId = await snapshot();
@@ -84,6 +90,27 @@ describe('PoolOracle', () => {
 
       await expect(poolOracle.connect(user).rescueFund(tokenA.address, amount))
         .to.be.reverted;
+    });
+  });
+
+  describe('#upgradable', async () => {
+    it('should upgrade', async () => {
+      const mockUpgradedLogic = await (await ethers.getContractFactory('MockOracleUpgraded')).deploy();
+
+      await poolOracle.connect(admin).upgradeTo(mockUpgradedLogic.address);
+
+      expect(BN.from(await ethers.provider.getStorageAt(poolOracle.address, IMPLEMENT_SLOT))).to.eq(
+        ethers.utils.hexZeroPad(mockUpgradedLogic.address, 32)
+      );
+    });
+
+    it('should rollback when upgrade to non UUPS', async () => {
+      const unsafeLogicContract = await (await ethers.getContractFactory('MockUnsafeUUPS')).deploy();
+
+      const currentLogicAddress = await ethers.provider.getStorageAt(poolOracle.address, IMPLEMENT_SLOT);
+
+      await expect(poolOracle.connect(admin).upgradeTo(unsafeLogicContract.address)).to.reverted;
+      expect(await ethers.provider.getStorageAt(poolOracle.address, IMPLEMENT_SLOT)).to.eq(currentLogicAddress);
     });
   });
 
