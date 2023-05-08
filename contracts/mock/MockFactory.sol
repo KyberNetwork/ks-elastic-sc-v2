@@ -3,6 +3,7 @@ pragma solidity >=0.8.0;
 
 import {IFactory} from '../interfaces/IFactory.sol';
 import {IPoolActions} from '../interfaces/pool/IPoolActions.sol';
+import {IPoolOracle} from '../interfaces/oracle/IPoolOracle.sol';
 import {MathConstants} from '../libraries/MathConstants.sol';
 import {BaseSplitCodeFactory} from '../libraries/BaseSplitCodeFactory.sol';
 import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
@@ -106,6 +107,7 @@ contract MockFactory is BaseSplitCodeFactory, IFactory {
     getPool[token0][token1][swapFeeUnits] = pool;
     // populate mapping in the reverse direction, deliberate choice to avoid the cost of comparing addresses
     getPool[token1][token0][swapFeeUnits] = pool;
+    IPoolOracle(poolOracle).registerPool(pool);
     emit PoolCreated(token0, token1, swapFeeUnits, tickDistance, pool);
   }
 

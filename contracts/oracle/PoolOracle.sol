@@ -34,6 +34,10 @@ contract PoolOracle is
 
   mapping(address => Oracle.Observation[65535]) internal poolOracle;
   mapping(address => ObservationData) internal poolObservation;
+  // Only whitelisted factories can register new pool address
+  mapping(address => bool) public isWhitelistFactory;
+  // Only registered pool can call to initialize or write a new entry
+  mapping(address => bool) public isPoolRegistered;
 
   function initialize() public initializer {
     __Ownable_init();
@@ -52,11 +56,30 @@ contract PoolOracle is
     emit OwnerWithdrew(owner(), token, amount);
   }
 
+  /// @notice Only the owner to add/remove a whitelisted factory
+  function updateWhitelistedFactory(address _factory, bool _isWhitelisted)
+    external
+    onlyOwner
+  {
+    isWhitelistFactory[_factory] = _isWhitelisted;
+    emit WhitelistFactory(_factory, _isWhitelisted);
+  }
+
+  /// @inheritdoc IPoolOracle
+  function registerPool(address _pool)
+    external override
+  {
+    require(isWhitelistFactory[msg.sender], 'not a whitelisted factory');
+    isPoolRegistered[_pool] = true;
+    emit RegisterPool(msg.sender, _pool);
+  }
+
   /// @inheritdoc IPoolOracle
   function initializeOracle(uint32 time)
     external override
     returns (uint16 cardinality, uint16 cardinalityNext)
   {
+    require(isPoolRegistered[msg.sender], 'not a registered pool');
     (cardinality, cardinalityNext) = poolOracle[msg.sender].initialize(time);
     poolObservation[msg.sender] = ObservationData({
       initialized: true,
@@ -93,6 +116,7 @@ contract PoolOracle is
     external
     override
   {
+    require(isPoolRegistered[pool], 'not a registered pool');
     uint16 observationCardinalityNextOld = poolObservation[pool].cardinalityNext;
     uint16 observationCardinalityNextNew = poolOracle[pool].grow(
       observationCardinalityNextOld,
@@ -119,6 +143,7 @@ contract PoolOracle is
     public override
     returns (uint16 indexUpdated, uint16 cardinalityUpdated)
   {
+    require(isPoolRegistered[msg.sender], 'not a registered pool');
     liquidity; // unused for now
     address pool = msg.sender;
     (indexUpdated, cardinalityUpdated) = poolOracle[pool].write(

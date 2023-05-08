@@ -1,6 +1,6 @@
 import {ethers, waffle} from 'hardhat';
 import {expect} from 'chai';
-import {BigNumber as BN, ContractTransaction} from 'ethers';
+import {BigNumber as BN} from 'ethers';
 import chai from 'chai';
 const {solidity} = waffle;
 chai.use(solidity);
@@ -27,7 +27,7 @@ describe('PoolOracle', () => {
     PoolOracleContract = (await ethers.getContractFactory('PoolOracle')) as PoolOracle__factory;
 
     poolOracle = await PoolOracleContract.connect(admin).deploy();
-    await poolOracle.initialize();
+    await poolOracle.connect(admin).initialize();
     expect(await poolOracle.owner()).to.be.eq(admin.address);
 
     snapshotId = await snapshot();
@@ -83,7 +83,67 @@ describe('PoolOracle', () => {
       await tokenA.transfer(poolOracle.address, amount);
 
       await expect(poolOracle.connect(user).rescueFund(tokenA.address, amount))
-        .to.be.reverted;
+        .to.be.revertedWith('Ownable: caller is not the owner');
+    });
+  });
+
+  describe('#updateWhitelistedFactory', async () => {
+    beforeEach('revert to snapshot', async () => {
+      await revertToSnapshot(snapshotId);
+      snapshotId = await snapshot();
+    });
+
+    it('update whitelisted factory and event', async () => {
+      let listAddresses = [admin.address, user.address];
+      listAddresses.forEach(async(addr) => {
+        expect(await poolOracle.isWhitelistFactory(addr)).to.be.eq(false);
+        await expect(poolOracle.connect(admin).updateWhitelistedFactory(addr, true))
+          .to.be.emit(poolOracle, 'WhitelistFactory')
+          .withArgs(addr, true);
+          expect(await poolOracle.isWhitelistFactory(addr)).to.be.eq(true);
+        await expect(poolOracle.connect(admin).updateWhitelistedFactory(addr, false))
+          .to.be.emit(poolOracle, 'WhitelistFactory')
+          .withArgs(addr, false);
+          expect(await poolOracle.isWhitelistFactory(addr)).to.be.eq(false);
+      });
+    });
+
+    it('revert not owner', async () => {
+      await expect(poolOracle.connect(user).updateWhitelistedFactory(tokenA.address, true))
+        .to.be.revertedWith('Ownable: caller is not the owner');
+        await expect(poolOracle.connect(user).updateWhitelistedFactory(tokenA.address, false))
+        .to.be.revertedWith('Ownable: caller is not the owner');
+    });
+  });
+
+  describe('#registerPool', async () => {
+    beforeEach('revert to snapshot', async () => {
+      await revertToSnapshot(snapshotId);
+      snapshotId = await snapshot();
+    });
+
+    it('register pool and event', async () => {
+      await poolOracle.connect(admin).updateWhitelistedFactory(admin.address, true);
+      await poolOracle.connect(admin).updateWhitelistedFactory(user.address, true);
+      let pools = [tokenA.address, user.address];
+      pools.forEach(async (pool) => {
+        expect(await poolOracle.isPoolRegistered(pool)).to.be.eq(false);
+        await expect(poolOracle.connect(admin).registerPool(pool))
+          .to.be.emit(poolOracle, 'RegisterPool')
+          .withArgs(admin.address, pool);
+        expect(await poolOracle.isPoolRegistered(pool)).to.be.eq(true);
+        await expect(poolOracle.connect(user).registerPool(pool))
+          .to.be.emit(poolOracle, 'RegisterPool')
+          .withArgs(user.address, pool);
+        expect(await poolOracle.isPoolRegistered(pool)).to.be.eq(true);
+      });
+    });
+
+    it('revert not whitelisted factory', async () => {
+      await expect(poolOracle.connect(admin).registerPool(tokenA.address))
+        .to.be.revertedWith('not a whitelisted factory');
+      await expect(poolOracle.connect(user).registerPool(tokenA.address))
+        .to.be.revertedWith('not a whitelisted factory');
     });
   });
 
@@ -91,12 +151,19 @@ describe('PoolOracle', () => {
     beforeEach('revert to snapshot', async () => {
       await revertToSnapshot(snapshotId);
       poolOracle = await PoolOracleContract.deploy();
-      await poolOracle.initialize();
+      await poolOracle.connect(admin).initialize();
+      await poolOracle.connect(admin).updateWhitelistedFactory(admin.address, true);
       snapshotId = await snapshot();
     });
 
+    it('revert not registered', async () => {
+      await expect(poolOracle.connect(user).initializeOracle(100))
+        .to.be.revertedWith('not a registered pool');
+    })
+
     it('correct default data after initialized', async () => {
       let times = [10, 20, 300];
+      await poolOracle.connect(admin).registerPool(user.address);
       for (let i = 0; i < times.length; i++) {
         await poolOracle.connect(user).initializeOracle(times[i]);
         await verifyStoredObservation(user.address, true, 0, 1, 1);
@@ -109,19 +176,27 @@ describe('PoolOracle', () => {
     beforeEach('revert to snapshot', async () => {
       await revertToSnapshot(snapshotId);
       poolOracle = await PoolOracleContract.deploy();
-      await poolOracle.initialize();
+      await poolOracle.connect(admin).initialize();
+      await poolOracle.connect(admin).updateWhitelistedFactory(admin.address, true);
       snapshotId = await snapshot();
+    });
+
+    it('revert not a registered pool', async () => {
+      await expect(poolOracle.connect(admin).increaseObservationCardinalityNext(admin.address, 1))
+        .to.be.revertedWith('not a registered pool');
     });
 
     it('revert current = 0, not initialized yet', async () => {
       // not initialized yet
       await verifyStoredObservation(admin.address, false, 0, 0, 0);
+      await poolOracle.connect(admin).registerPool(admin.address);
       await expect(poolOracle.connect(admin).increaseObservationCardinalityNext(admin.address, 1))
         .to.be.revertedWith('I');
     });
 
     it('nothing happens when next <= current', async () => {
       let initTime = 10;
+      await poolOracle.connect(admin).registerPool(user.address);
       await poolOracle.connect(user).initializeOracle(initTime);
       let observation = await poolOracle.getPoolObservation(user.address);
       // current == next
@@ -140,6 +215,7 @@ describe('PoolOracle', () => {
 
     it('verify block timestamp increases', async () => {
       let initTime = 5;
+      await poolOracle.connect(admin).registerPool(user.address);
       await poolOracle.connect(user).initializeOracle(initTime);
       let times = [10, 15, 20, 30];
       let ticks = [5, 10, -10, -20];
@@ -183,14 +259,21 @@ describe('PoolOracle', () => {
     beforeEach('revert to snapshot', async () => {
       await revertToSnapshot(snapshotId);
       poolOracle = await PoolOracleContract.deploy();
-      await poolOracle.initialize();
+      await poolOracle.connect(admin).initialize();
+      await poolOracle.connect(admin).updateWhitelistedFactory(admin.address, true);
       snapshotId = await snapshot();
+    });
+
+    it('revert not a registered pool', async () => {
+      await expect(poolOracle.connect(user).writeNewEntry(0, 1000, 10, defaultLiquidity, 1, 1))
+        .to.be.revertedWith('not a registered pool');
     });
 
     it('write to index with same timestamp, no updates observation, updates pool observation', async () => {
       // write an entry to the observations
       let blockTimestamp = 1000;
       let tick = 10;
+      await poolOracle.connect(admin).registerPool(user.address);
       await poolOracle.connect(user).initializeOracle(blockTimestamp);
       let poolObs = await poolOracle.getPoolObservation(user.address);
       let obsData0 = await poolOracle.getObservationAt(user.address, 0);
@@ -234,6 +317,7 @@ describe('PoolOracle', () => {
       let blockTimestamp = 1000;
       let tick = 10;
       let tickCumulative = BN.from(0);
+      await poolOracle.connect(admin).registerPool(user.address);
       await poolOracle.connect(user).initializeOracle(blockTimestamp);
 
       await verifyStoredObservation(user.address, true, 0, 1, 1);
@@ -280,6 +364,7 @@ describe('PoolOracle', () => {
       let blockTimestamp = 1000;
       let tick = 10;
       let tickCumulative = BN.from(0);
+      await poolOracle.connect(admin).registerPool(user.address);
       await poolOracle.connect(user).initializeOracle(blockTimestamp);
 
       await verifyStoredObservation(user.address, true, 0, 1, 1);

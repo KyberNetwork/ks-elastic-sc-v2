@@ -2,6 +2,22 @@
 pragma solidity >=0.8.0;
 
 interface IPoolOracle {
+  /// @notice Owner add/remove a factory from the whitelisted factories
+  /// @param factory address to be added/removed
+  /// @param isWhitelisted true if add, false if remove
+  event WhitelistFactory(
+    address indexed factory,
+    bool indexed isWhitelisted
+  );
+
+  /// @notice A whitelisted factory register a pool
+  /// @param factory the address to register the pool
+  /// @param pool the pool address to be registered
+  event RegisterPool(
+    address indexed factory,
+    address indexed pool
+  );
+
   /// @notice Owner withdrew funds in the pool oracle in case some funds are stuck there
   event OwnerWithdrew(
     address indexed owner,
@@ -21,13 +37,20 @@ interface IPoolOracle {
     uint16 observationCardinalityNextNew
   );
 
+  /// @notice Factory calls to register a new pool
+  /// @param _pool the pool address to be registered
+  function registerPool(address _pool)
+    external;
+
   /// @notice Initalize observation data for the caller.
+  ///   Only a registered pool can call
   function initializeOracle(uint32 time)
     external
     returns (uint16 cardinality, uint16 cardinalityNext);
 
   /// @notice Write a new oracle entry into the array
   ///   and update the observation index and cardinality
+  ///   Only a registered pool can call
   /// Read the Oralce.write function for more details
   function writeNewEntry(
     uint16 index,
@@ -42,6 +65,7 @@ interface IPoolOracle {
 
   /// @notice Write a new oracle entry into the array, take the latest observaion data as inputs
   ///   and update the observation index and cardinality
+  ///   Only a registered pool can call
   /// Read the Oralce.write function for more details
   function write(
     uint32 blockTimestamp,
@@ -54,6 +78,7 @@ interface IPoolOracle {
   /// @notice Increase the maximum number of price observations that this pool will store
   /// @dev This method is no-op if the pool already has an observationCardinalityNext greater than or equal to
   /// the input observationCardinalityNext.
+  ///   Only can call for a initialized + registed pool
   /// @param pool The pool address to be updated
   /// @param observationCardinalityNext The desired minimum number of observations for the pool to store
   function increaseObservationCardinalityNext(

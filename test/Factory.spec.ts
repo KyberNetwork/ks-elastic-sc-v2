@@ -31,12 +31,14 @@ describe('Factory', () => {
 
     const PoolOracleContract = (await ethers.getContractFactory('PoolOracle')) as PoolOracle__factory;
     poolOracle = (await PoolOracleContract.connect(admin).deploy());
+    await poolOracle.connect(admin).initialize()
     const FactoryContract = (await ethers.getContractFactory('Factory')) as Factory__factory;
     return await FactoryContract.connect(admin).deploy(vestingPeriod, poolOracle.address);
   }
 
   beforeEach('load fixture', async () => {
     factory = await loadFixture(fixture);
+    await poolOracle.connect(admin).updateWhitelistedFactory(factory.address, true);
     swapFeeUnits = 40;
     tickDistance = 8;
   });
@@ -99,7 +101,7 @@ describe('Factory', () => {
     it('should return the same pool address regardless of token order', async () => {
       await factory.createPool(tokenA.address, tokenB.address, swapFeeUnits);
       let poolAddressOne = await factory.getPool(tokenA.address, tokenB.address, swapFeeUnits);
-      let poolAddressTwo = await factory.getPool(tokenA.address, tokenB.address, swapFeeUnits);
+      let poolAddressTwo = await factory.getPool(tokenB.address, tokenA.address, swapFeeUnits);
       expect(poolAddressOne).to.be.eq(poolAddressTwo);
       expect(poolAddressOne).to.not.be.eq(ZERO_ADDRESS);
     });
@@ -134,6 +136,30 @@ describe('Factory', () => {
       expect(poolAddress).to.eql(
         getCreate2Address(factory.address, [tokenA.address, tokenB.address, swapFeeUnits], factoryBytecode)
       );
+    });
+
+    it('should revert if factory is not whitelisted in PoolOracle', async () => {
+      await poolOracle.connect(admin).updateWhitelistedFactory(factory.address, false);
+      await expect(
+        factory.createPool(tokenA.address, tokenB.address, swapFeeUnits)
+      ).to.be.revertedWith('not a whitelisted factory');
+      // can create pool normally
+      await poolOracle.connect(admin).updateWhitelistedFactory(factory.address, true);
+      await factory.createPool(tokenA.address, tokenB.address, swapFeeUnits);
+    });
+
+    it('should register pool into PoolOracle, event emitted', async () => {
+      // precompute pool
+      let factoryBytecode = await factory.getCreationCode();
+      let poolAddress = getCreate2Address(factory.address, [tokenA.address, tokenB.address, swapFeeUnits], factoryBytecode);
+      expect(await poolOracle.isPoolRegistered(poolAddress)).to.be.eq(false);
+      // expect to emit event
+      await expect(
+        factory.createPool(tokenA.address, tokenB.address, swapFeeUnits)
+      ).to.emit(poolOracle, 'RegisterPool')
+      .withArgs(factory.address, poolAddress);
+      // check pool has been registered
+      expect(await poolOracle.isPoolRegistered(poolAddress)).to.be.eq(true);
     });
   });
 

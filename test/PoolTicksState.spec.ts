@@ -61,10 +61,12 @@ describe('PoolTicksState', () => {
   beforeEach('setup', async () => {
     const PoolOracleContract = (await ethers.getContractFactory('PoolOracle')) as PoolOracle__factory;
     poolOracle = await PoolOracleContract.deploy();
+    await poolOracle.connect(user1).initialize();
     const MockPoolTicksStateFactoryContract = (await ethers.getContractFactory(
       'MockPoolTicksStateFactory'
     )) as MockPoolTicksStateFactory__factory;
     factory = await MockPoolTicksStateFactoryContract.deploy();
+    await poolOracle.connect(user1).updateWhitelistedFactory(factory.address, true);
 
     // deploy mock poolTicksState
     await factory.create(poolOracle.address, ZERO_ADDRESS, ZERO_ADDRESS, 5, tickSpacing);

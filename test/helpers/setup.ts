@@ -22,15 +22,18 @@ export async function deployMockFactory(admin: any, vestingPeriod: BigNumberish)
   await poolOracle.initialize();
   const FactoryContract = (await ethers.getContractFactory('MockFactory')) as MockFactory__factory;
   let factory = await FactoryContract.connect(admin).deploy(vestingPeriod, poolOracle.address);
+  await poolOracle.connect(admin).updateWhitelistedFactory(factory.address, true);
   return [factory, poolOracle];
 }
 
 export async function deployFactory(admin: any, vestingPeriod: BigNumberish): Promise<Factory> {
   const PoolOracleContract = (await ethers.getContractFactory('PoolOracle')) as PoolOracle__factory;
   const poolOracle = await PoolOracleContract.connect(admin).deploy();
+  await poolOracle.initialize();
   const FactoryContract = (await ethers.getContractFactory('Factory')) as Factory__factory;
   const factory = await FactoryContract.connect(admin).deploy(vestingPeriod, poolOracle.address);
   await factory.updateFeeConfiguration(admin.address, FEE_UNITS.div(10)); // 10% fee
+  await poolOracle.connect(admin).updateWhitelistedFactory(factory.address, true);
   return factory;
 }
 

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {PoolTicksState} from '../PoolTicksState.sol';
+import {IPoolOracle} from '../interfaces/oracle/IPoolOracle.sol';
 
 contract MockPoolTicksStateFactory {
   struct Parameters {
@@ -31,6 +32,7 @@ contract MockPoolTicksStateFactory {
     parameters.tickDistance = tickDistance;
 
     state = new MockPoolTicksState();
+    IPoolOracle(poolOracle).registerPool(address(state));
   }
 }
 

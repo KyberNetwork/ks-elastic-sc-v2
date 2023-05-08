@@ -107,6 +107,8 @@ contract Factory is BaseSplitCodeFactory, IFactory {
     getPool[token0][token1][swapFeeUnits] = pool;
     // populate mapping in the reverse direction, deliberate choice to avoid the cost of comparing addresses
     getPool[token1][token0][swapFeeUnits] = pool;
+    // register the pool into Oracle
+    IPoolOracle(poolOracle).registerPool(pool);
     emit PoolCreated(token0, token1, swapFeeUnits, tickDistance, pool);
   }
 
