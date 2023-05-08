@@ -77,9 +77,6 @@ library SwapMath {
       );
       nextSqrtP = calcFinalPrice(absDelta, liquidity, deltaL, currentSqrtP, isExactInput, isToken0)
       .toUint160();
-      // safe check to ensure nextSqrtP shouldn't pass targetSqrtP
-      if (isToken0 != isExactInput) assert(nextSqrtP <= targetSqrtP);
-      else assert(nextSqrtP >= targetSqrtP);
     } else {
       deltaL = calcIncrementalLiquidity(
         absDelta,
