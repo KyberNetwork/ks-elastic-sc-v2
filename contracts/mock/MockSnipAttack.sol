@@ -46,9 +46,11 @@ contract MockSnipAttack {
     _doSwap(pool, params);
 
     // add small liquidity to lock fees
+    int24[2] memory ticksPrevious;
     (uint128 addedLiquidity, , , ) = posManager.addLiquidity(
       IBasePositionManager.IncreaseLiquidityParams({
         tokenId: tokenId,
+        ticksPrevious: ticksPrevious,
         amount0Desired: 1000,
         amount1Desired: 1000,
         amount0Min: 0,
