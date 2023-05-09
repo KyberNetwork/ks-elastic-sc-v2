@@ -170,6 +170,104 @@ describe('SwapMath', () => {
     console.log(`lc2=${lc2.toString()}`); // 16916406.564505359636169345
   });
 
+  describe('#computeSwapStep - new branch', async () => {
+    it('token0 -> token1 exact input', async () => {
+      const liquidity = PRECISION.mul(ONE);
+      const priceStart = encodePriceSqrt(1, 1);
+      const priceEnd = encodePriceSqrt(100, 101);
+      // calculate the amount of token0 to swap from 1 -> 1 / 1.01
+      const usedAmount = await swapMath.calcReachAmount(liquidity, priceStart, priceEnd, fee, true, true);
+      console.log(`usedAmount: ${usedAmount.toString()}`); // 0.004995092120267736
+      // specifiedAmount < usedAmount, usedAmount will be set to be specifiedAmount
+      let specifiedAmount = usedAmount.sub(BN.from(10));
+      let output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, true, true
+      );
+      expect(output.usedAmount).to.be.eq(specifiedAmount);
+      // specifiedAmount >= usedAmount -> the second branch
+      specifiedAmount = usedAmount.add(BN.from(10));
+      output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, true, true
+      );
+      expect(output.usedAmount).to.be.eq(usedAmount);
+    });
+
+    it('token0 -> token1 exact output', async () => {
+      const liquidity = PRECISION.mul(ONE);
+      const priceStart = encodePriceSqrt(1, 1);
+      const priceEnd = encodePriceSqrt(100, 101);
+      // calculate the amount of token0 to swap from 1 -> 1 / 1.01
+      const usedAmount = await swapMath.calcReachAmount(liquidity, priceStart, priceEnd, fee, false, false);
+      console.log(`usedAmount: ${usedAmount.toString()}`);
+      // specifiedAmount < usedAmount, usedAmount will NOT be set to be specifiedAmount
+      let specifiedAmount = usedAmount.sub(BN.from(10));
+      let output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, false, false
+      );
+      expect(output.usedAmount).to.be.eq(usedAmount);
+      // specifiedAmount == usedAmount
+      specifiedAmount = usedAmount;
+      output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, false, false
+      );
+      expect(output.usedAmount).to.be.eq(specifiedAmount);
+      // specifiedAmount > usedAmount, usedAmount will be set to be specifiedAmount
+      specifiedAmount = usedAmount.add(BN.from(10));
+      output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, false, false
+      );
+      expect(output.usedAmount).to.be.eq(specifiedAmount);
+    });
+
+    it('token1 -> token0 exact input', async () => {
+      const liquidity = PRECISION.mul(ONE);
+      const priceStart = encodePriceSqrt(1, 1);
+      const priceEnd = encodePriceSqrt(101, 100);
+      // calculate the amount of token0 to swap from 1 -> 1.01
+      const usedAmount = await swapMath.calcReachAmount(liquidity, priceStart, priceEnd, fee, true, false);
+      console.log(`usedAmount: ${usedAmount.toString()}`);
+      // specifiedAmount < usedAmount, usedAmount will be set to be specifiedAmount
+      let specifiedAmount = usedAmount.sub(BN.from(10));
+      let output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, true, false
+      );
+      expect(output.usedAmount).to.be.eq(specifiedAmount);
+      // specifiedAmount >= usedAmount, usedAmount will NOT be set to be specifiedAmount
+      specifiedAmount = usedAmount.add(BN.from(10));
+      output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, true, false
+      );
+      expect(output.usedAmount).to.be.eq(usedAmount);
+    });
+
+    it('token1 -> token0 exact output', async () => {
+      const liquidity = PRECISION.mul(ONE);
+      const priceStart = encodePriceSqrt(1, 1);
+      const priceEnd = encodePriceSqrt(101, 100);
+      // calculate the amount of token0 to swap from 1 -> 1.01
+      const usedAmount = await swapMath.calcReachAmount(liquidity, priceStart, priceEnd, fee, false, true);
+      console.log(`usedAmount: ${usedAmount.toString()}`); // 0.004995092120267736
+      // specifiedAmount < usedAmount, usedAmount will NOT be set to be specifiedAmount
+      let specifiedAmount = usedAmount.sub(BN.from(10));
+      let output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, false, true
+      );
+      expect(output.usedAmount).to.be.eq(usedAmount);
+      // specifiedAmount == usedAmount
+      specifiedAmount = usedAmount;
+      output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, false, true
+      );
+      expect(output.usedAmount).to.be.eq(usedAmount);
+      // specifiedAmount >= usedAmount, usedAmount will be set to be specifiedAmount
+      specifiedAmount = usedAmount.add(BN.from(10));
+      output = await swapMath.computeSwapStep(
+        liquidity, priceStart, priceEnd, fee, specifiedAmount, false, true
+      );
+      expect(output.usedAmount).to.be.eq(specifiedAmount);
+    });
+  });
+
   describe('#gas [ @skip-on-coverage ]', async () => {
     it('from token0 -> token1 exact input', async () => {
       const liquidity = PRECISION.mul(ONE);
