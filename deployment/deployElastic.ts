@@ -154,16 +154,22 @@ task('deployElastic', 'deploy router, factory and position manager')
     }
     outputData['posManager'] = posManager.address;
 
-    // transfer ownership to admin
-    if (admin != '') {
-      console.log(`updating config master...`);
-      await factory.updateConfigMaster(admin, {gasPrice: gasPrice});
-    }
     let feeUnits = [20, 100, 250, 2000, 5000]
     let tickDistances = [2, 10, 25, 100, 100]
     for (let i = 0; i < feeUnits.length; i++) {
       console.log(`Enable swap fee ${feeUnits[i]} with tick distance ${tickDistances[i]}`)
-      await factory.enableSwapFee(feeUnits[i], tickDistances[i]);
+      await factory.enableSwapFee(feeUnits[i], tickDistances[i], {gasPrice: gasPrice});
+    }
+
+    // add whitelist factory
+    console.log(`whitelisting factory to Pool Oracle`);
+    let poolOracleProxy = await hre.ethers.getContractAt('PoolOracle', poolOracleAddress) as PoolOracle;
+    await poolOracleProxy.updateWhitelistedFactory(factory.address, true, {gasPrice: gasPrice});
+    // transfer ownership to admin
+    if (admin != '') {
+      console.log(`updating config master...`);
+      await factory.updateConfigMaster(admin, {gasPrice: gasPrice});
+      await poolOracleProxy.transferOwnership(admin, {gasPrice: gasPrice});
     }
 
     console.log(`deploying tick and fees helper...`);
