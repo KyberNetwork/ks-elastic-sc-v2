@@ -64,6 +64,9 @@ interface IBasePositionManager is IRouterTokenHelper, IBasePositionManagerEvents
 
   /// @notice Params for adding liquidity to the existing position
   /// @param tokenId id of the position to increase its liquidity
+  /// @param ticksPrevious the nearest tick that has been initialized and lower than or equal to
+  ///   the tickLower and tickUpper, use to help insert the tickLower and tickUpper if haven't initialized
+  ///   only needed if the position has been closed and the owner wants to add more liquidity
   /// @param amount0Desired the desired amount for token0
   /// @param amount1Desired the desired amount for token1
   /// @param amount0Min min amount of token 0 to add
@@ -71,6 +74,7 @@ interface IBasePositionManager is IRouterTokenHelper, IBasePositionManagerEvents
   /// @param deadline time that the transaction will be expired
   struct IncreaseLiquidityParams {
     uint256 tokenId;
+    int24[2] ticksPrevious;
     uint256 amount0Desired;
     uint256 amount1Desired;
     uint256 amount0Min;

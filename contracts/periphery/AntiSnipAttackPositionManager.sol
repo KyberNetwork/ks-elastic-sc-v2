@@ -49,7 +49,6 @@ contract AntiSnipAttackPositionManager is BasePositionManager {
     IPool pool;
     uint256 feeGrowthInsideLast;
 
-    int24[2] memory ticksPrevious;
     (liquidity, amount0, amount1, feeGrowthInsideLast, pool) = _addLiquidity(
       AddLiquidityParams({
         token0: poolInfo.token0,
@@ -58,7 +57,7 @@ contract AntiSnipAttackPositionManager is BasePositionManager {
         recipient: address(this),
         tickLower: pos.tickLower,
         tickUpper: pos.tickUpper,
-        ticksPrevious: ticksPrevious,
+        ticksPrevious: params.ticksPrevious,
         amount0Desired: params.amount0Desired,
         amount1Desired: params.amount1Desired,
         amount0Min: params.amount0Min,
