@@ -436,13 +436,31 @@ describe('Pool', () => {
             expect(tickUpperData.secondsPerLiquidityOutside).to.be.eq(ZERO);
           });
 
-          it('should not have updated time data if initial pool liquidity is zero', async () => {
+          it('should have updated time data if initial pool liquidity is zero', async () => {
             // mint new position
             await callback.mint(pool.address, user.address, tickLower, tickUpper, ticksPrevious, PRECISION, '0x');
             let data = await pool.getSecondsPerLiquidityData();
 
             expect(data.secondsPerLiquidityGlobal).to.be.eq(ZERO);
-            expect(data.lastUpdateTime).to.be.eq(ZERO);
+            expect(data.lastUpdateTime).to.be.eq(await pool.blockTimestamp());
+          });
+
+          it('should have updated time data if base liquidity is zero', async () => {
+            // mint new position
+            await callback.mint(pool.address, user.address, tickLower, tickUpper, ticksPrevious, PRECISION, '0x');
+            let data = await pool.getSecondsPerLiquidityData();
+            expect(data.secondsPerLiquidityGlobal).to.be.eq(ZERO);
+            expect(data.lastUpdateTime).to.be.eq(await pool.blockTimestamp());
+
+            expect((await pool.getLiquidityState()).baseL).to.be.eq(ZERO);
+
+            await pool.forwardTime(10);
+            await callback.mint(pool.address, user.address, tickLower, tickUpper, ticksPrevious, PRECISION, '0x');
+            expect((await pool.getLiquidityState()).baseL).to.be.eq(ZERO); // still 0 baseL
+            data = await pool.getSecondsPerLiquidityData();
+            expect(data.secondsPerLiquidityGlobal).to.be.eq(ZERO);
+            expect(data.lastUpdateTime).to.be.eq(await pool.blockTimestamp()); // should update to the latest
+
           });
 
           it('should update time data if initial pool liquidity is non-zero', async () => {
@@ -458,6 +476,7 @@ describe('Pool', () => {
               '0x'
             );
             let beforeData = await pool.getSecondsPerLiquidityData();
+            await pool.forwardTime(1);
             // mint position
             await callback.mint(pool.address, user.address, tickLower, tickUpper, ticksPrevious, PRECISION, '0x');
 
@@ -716,21 +735,23 @@ describe('Pool', () => {
           });
 
           it('should have correctly updated time data', async () => {
+            let currentTime = await pool.blockTimestamp();
             // mint new position
             await callback.mint(pool.address, user.address, tickLower, tickUpper, ticksPrevious, PRECISION, '0x');
 
             // pool liquidity before update is zero, so no update occurs
             let data = await pool.getSecondsPerLiquidityData();
             expect(data.secondsPerLiquidityGlobal).to.be.eq(ZERO);
-            expect(data.lastUpdateTime).to.be.eq(ZERO);
+            expect(data.lastUpdateTime).to.be.eq(currentTime);
 
+            await pool.forwardTime(10);
             // mint again
             await callback.mint(pool.address, user.address, tickLower, tickUpper, ticksPrevious, PRECISION, '0x');
 
             // pool liquidity before update is non-zero, should have updated
             data = await pool.getSecondsPerLiquidityData();
             expect(data.secondsPerLiquidityGlobal).to.be.gt(ZERO);
-            expect(data.lastUpdateTime).to.be.gt(ZERO);
+            expect(data.lastUpdateTime).to.be.eq(currentTime + 10);
           });
 
           it('should instantiate tick lower feeGrowthOutside and secondsPerLiquidityOutside for mint', async () => {
@@ -991,13 +1012,13 @@ describe('Pool', () => {
             expect(tickUpperData.secondsPerLiquidityOutside).to.be.eq(ZERO);
           });
 
-          it('should not have updated time data if initial pool liquidity is zero', async () => {
+          it('should have updated time data if initial pool liquidity is zero', async () => {
             // mint new position
             await callback.mint(pool.address, user.address, tickLower, tickUpper, ticksPrevious, PRECISION, '0x');
 
             let data = await pool.getSecondsPerLiquidityData();
             expect(data.secondsPerLiquidityGlobal).to.be.eq(ZERO);
-            expect(data.lastUpdateTime).to.be.eq(ZERO);
+            expect(data.lastUpdateTime).to.be.eq(await pool.blockTimestamp());
           });
 
           it('should update time data if initial pool liquidity is non-zero', async () => {
@@ -1013,6 +1034,7 @@ describe('Pool', () => {
               '0x'
             );
             let beforeData = await pool.getSecondsPerLiquidityData();
+            await pool.forwardTime(1);
             // mint position
             await callback.mint(pool.address, user.address, tickLower, tickUpper, ticksPrevious, PRECISION, '0x');
 
