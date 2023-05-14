@@ -44,10 +44,9 @@ contract TicksFeesReader {
     // calculate num ticks from starting tick
     uint32 maxNumTicks;
     if (length == 0) {
-      maxNumTicks = uint32(uint256(int256((T.MAX_TICK - startTick) / pool.tickDistance())));
-      if (startTick == 0 || startTick == T.MAX_TICK) {
-        maxNumTicks++;
-      }
+      int24 tickDistance = pool.tickDistance();
+      maxNumTicks = uint32(uint256(int256((T.MAX_TICK - startTick) / tickDistance + 1)));
+      if (T.MAX_TICK % tickDistance != 0) maxNumTicks++;
     } else {
       maxNumTicks = length;
     }
@@ -65,6 +64,7 @@ contract TicksFeesReader {
     view
     returns (int24 previous, int24 next)
   {
+    require(T.MIN_TICK <= tick && tick <= T.MAX_TICK, 'tick not in range');
     // if queried tick already initialized, fetch and return values
     (previous, next) = pool.initializedTicks(tick);
     if (previous != 0 || next != 0) return (previous, next);
