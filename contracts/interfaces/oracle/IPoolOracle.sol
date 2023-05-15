@@ -62,18 +62,6 @@ interface IPoolOracle {
   )
     external;
 
-  /// @notice Returns the accumulator values as of each time seconds ago from the given time in the array of `secondsAgos`
-  /// @dev Reverts if `secondsAgos` > oldest observation
-  /// @dev It fetches the latest current tick data from the pool
-  /// Read the Oracle.observe function for more details
-  function observeFromPoolAt(
-    uint32 time,
-    address pool,
-    uint32[] memory secondsAgos
-  )
-    external view
-    returns (int56[] memory tickCumulatives);
-
   /// @notice Returns the accumulator values as of each time seconds ago from the latest block time in the array of `secondsAgos`
   /// @dev Reverts if `secondsAgos` > oldest observation
   /// @dev It fetches the latest current tick data from the pool
@@ -85,26 +73,13 @@ interface IPoolOracle {
     external view
     returns (int56[] memory tickCumulatives);
 
-  /// @notice Returns the accumulator values as of each time seconds ago from the latest block time in the array of `secondsAgos`
-  /// @dev Reverts if `secondsAgos` > oldest observation
-  /// Read the Oracle.observe function for more details
-  function observe(
-    uint32 time,
-    uint32[] memory secondsAgos,
-    int24 tick
-  )
-    external view
-    returns (int56[] memory tickCumulatives);
-
-  /// @dev Reverts if an observation at or before the desired observation timestamp does not exist.
-  /// 0 may be passed as `secondsAgo' to return the current cumulative values.
-  /// If called with a timestamp falling between two observations, returns the counterfactual accumulator values
-  /// at exactly the timestamp between the two observations.
-  /// Read the Oracle.observe function for more details
-  function observeSingle(
-    uint32 time,
-    uint32 secondsAgo,
-    int24 tick
+  /// @notice Returns the accumulator values as the time seconds ago from the latest block time of secondsAgo
+  /// @dev Reverts if `secondsAgo` > oldest observation
+  /// @dev It fetches the latest current tick data from the pool
+  /// Read the Oracle.observeSingle function for more details
+  function observeSingleFromPool(
+    address pool,
+    uint32 secondsAgo
   )
     external view
     returns (int56 tickCumulative);
