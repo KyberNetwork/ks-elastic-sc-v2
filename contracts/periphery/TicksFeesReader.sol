@@ -19,7 +19,8 @@ contract TicksFeesReader {
   /// Has the highest probability of running out of gas
   function getAllTicks(IPoolStorage pool) external view returns (int24[] memory allTicks) {
     // + 3 because of MIN_TICK, 0 and MAX_TICK
-    uint32 maxNumTicks = uint32((uint256(int256(T.MAX_TICK / pool.tickDistance()))) * 2 + 3);
+    // count (1, MAX_TICK - 1) * 2
+    uint32 maxNumTicks = uint32((uint256(int256((T.MAX_TICK - 1) / pool.tickDistance()))) * 2 + 3);
     allTicks = new int24[](maxNumTicks);
     int24 currentTick = T.MIN_TICK;
     allTicks[0] = currentTick;
@@ -44,9 +45,14 @@ contract TicksFeesReader {
     // calculate num ticks from starting tick
     uint32 maxNumTicks;
     if (length == 0) {
-      maxNumTicks = uint32(uint256(int256((T.MAX_TICK - startTick) / pool.tickDistance())));
-      if (startTick == 0 || startTick == T.MAX_TICK) {
-        maxNumTicks++;
+      int24 tickDistance = pool.tickDistance(); // tickDistance should always be positive
+      if (startTick == T.MIN_TICK) {
+        maxNumTicks = uint32((uint256(int256((T.MAX_TICK - 1) / tickDistance))) * 2 + 3);
+      } else if (startTick == T.MAX_TICK) {
+        maxNumTicks = 1;
+      } else {
+        // startTick % tickDistance == 0
+        maxNumTicks = uint32(uint256(int256((T.MAX_TICK - 1 - startTick) / tickDistance))) + 2;
       }
     } else {
       maxNumTicks = length;
@@ -65,6 +71,7 @@ contract TicksFeesReader {
     view
     returns (int24 previous, int24 next)
   {
+    require(T.MIN_TICK <= tick && tick <= T.MAX_TICK, 'tick not in range');
     // if queried tick already initialized, fetch and return values
     (previous, next) = pool.initializedTicks(tick);
     if (previous != 0 || next != 0) return (previous, next);

@@ -570,11 +570,13 @@ contract Pool is IPool, PoolTicksState, ERC20('KyberSwap v2 Reinvestment Token',
   {
     uint256 secondsElapsed = _blockTimestamp() - poolData.secondsPerLiquidityUpdateTime;
     // update secondsPerLiquidityGlobal and secondsPerLiquidityUpdateTime if needed
-    if (secondsElapsed > 0 && baseL > 0) {
-      _secondsPerLiquidityGlobal += uint128((secondsElapsed << C.RES_96) / baseL);
-      // write to storage
-      poolData.secondsPerLiquidityGlobal = _secondsPerLiquidityGlobal;
+    if (secondsElapsed > 0) {
       poolData.secondsPerLiquidityUpdateTime = _blockTimestamp();
+      if (baseL > 0) {
+        _secondsPerLiquidityGlobal += uint128((secondsElapsed << C.RES_96) / baseL);
+        // write to storage
+        poolData.secondsPerLiquidityGlobal = _secondsPerLiquidityGlobal;
+      }
     }
     return _secondsPerLiquidityGlobal;
   }

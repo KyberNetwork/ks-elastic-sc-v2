@@ -35,7 +35,7 @@ interface IBasePositionManager is IRouterTokenHelper, IBasePositionManagerEvents
   /// @param token0 the token0 of the pool
   /// @param token1 the token1 of the pool
   ///   - must make sure that token0 < token1
-  /// @param fee the pool's fee in bps
+  /// @param fee the pool's fee in fee units
   /// @param tickLower the position's lower tick
   /// @param tickUpper the position's upper tick
   ///   - must make sure tickLower < tickUpper, and both are in tick distance
