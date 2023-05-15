@@ -6,7 +6,7 @@ const {solidity, loadFixture} = waffle;
 chai.use(solidity);
 
 import {MockFactory, MockPool, MockToken, MockToken__factory, MockPool__factory} from '../typechain';
-import {QuoterV2, QuoterV2__factory, MockCallbacks, MockCallbacks__factory, PoolOracle} from '../typechain';
+import {QuoterV2, QuoterV2__factory, MockCallbacks, MockCallbacks__factory, MockPoolOracle} from '../typechain';
 
 import {MIN_LIQUIDITY, MIN_TICK, MAX_TICK, MIN_SQRT_RATIO, MAX_SQRT_RATIO, FEE_UNITS} from './helpers/helper';
 import {ZERO_ADDRESS, ZERO, ONE, MAX_UINT, PRECISION, TWO, BPS, NEGATIVE_ONE} from './helpers/helper';
@@ -17,7 +17,7 @@ import {encodePriceSqrt, getMaxTick, getMinTick, getNearestSpacedTickAtPrice} fr
 import {getPriceFromTick, snapshotGasCost} from './helpers/utils';
 
 let factory: MockFactory;
-let poolOracle: PoolOracle;
+let poolOracle: MockPoolOracle;
 let token0: MockToken;
 let token1: MockToken;
 let quoter: QuoterV2;
@@ -46,7 +46,7 @@ let positionData: any;
 class Fixtures {
   constructor(
     public factory: MockFactory,
-    public poolOracle: PoolOracle,
+    public poolOracle: MockPoolOracle,
     public poolArray: MockPool[],
     public token0: MockToken,
     public token1: MockToken,

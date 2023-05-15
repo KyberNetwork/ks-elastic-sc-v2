@@ -140,42 +140,31 @@ contract PoolOracle is
     external view override
     returns (int56[] memory tickCumulatives)
   {
-    return observeFromPoolAt(uint32(block.timestamp), pool, secondsAgos);
-  }
-
-  /// @inheritdoc IPoolOracle
-  function observe(
-    uint32 time,
-    uint32[] memory secondsAgos,
-    int24 tick
-  )
-    external view override
-    returns (int56[] memory tickCumulatives)
-  {
-    return poolOracle[msg.sender].observe(
-      time,
+    (, int24 tick, ,) = IPoolStorage(pool).getPoolState();
+    return poolOracle[pool].observe(
+      _blockTimestamp(),
       secondsAgos,
       tick,
-      poolObservation[msg.sender].index,
-      poolObservation[msg.sender].cardinality
+      poolObservation[pool].index,
+      poolObservation[pool].cardinality
     );
   }
 
   /// @inheritdoc IPoolOracle
-  function observeSingle(
-    uint32 time,
-    uint32 secondsAgo,
-    int24 tick
+  function observeSingleFromPool(
+    address pool,
+    uint32 secondsAgo
   )
     external view override
     returns (int56 tickCumulative)
   {
-    return poolOracle[msg.sender].observeSingle(
-      time,
+    (, int24 tick, ,) = IPoolStorage(pool).getPoolState();
+    return poolOracle[pool].observeSingle(
+      _blockTimestamp(),
       secondsAgo,
       tick,
-      poolObservation[msg.sender].index,
-      poolObservation[msg.sender].cardinality
+      poolObservation[pool].index,
+      poolObservation[pool].cardinality
     );
   }
 
@@ -209,22 +198,8 @@ contract PoolOracle is
     );
   }
 
-  /// @inheritdoc IPoolOracle
-  function observeFromPoolAt(
-    uint32 time,
-    address pool,
-    uint32[] memory secondsAgos
-  )
-    public view override
-    returns (int56[] memory tickCumulatives)
-  {
-    (, int24 tick, ,) = IPoolStorage(pool).getPoolState();
-    return poolOracle[pool].observe(
-      time,
-      secondsAgos,
-      tick,
-      poolObservation[pool].index,
-      poolObservation[pool].cardinality
-    );
+  /// @dev For overriding in tests
+  function _blockTimestamp() internal view virtual returns (uint32) {
+    return uint32(block.timestamp);
   }
 }

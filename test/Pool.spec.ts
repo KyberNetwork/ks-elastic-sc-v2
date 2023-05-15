@@ -5,7 +5,7 @@ import chai from 'chai';
 const {solidity, loadFixture} = waffle;
 chai.use(solidity);
 
-import {MockFactory, MockPool, MockToken, MockToken__factory, MockPool__factory, PoolOracle, PoolOracle__factory} from '../typechain';
+import {MockFactory, MockPool, MockToken, MockToken__factory, MockPool__factory, MockPoolOracle} from '../typechain';
 import {QuoterV2, QuoterV2__factory, MockCallbacks, MockCallbacks__factory} from '../typechain';
 
 import {MIN_LIQUIDITY, MIN_TICK, MAX_TICK, MIN_SQRT_RATIO, MAX_SQRT_RATIO, FEE_UNITS} from './helpers/helper';
@@ -17,7 +17,7 @@ import {encodePriceSqrt, getMaxTick, getMinTick, getNearestSpacedTickAtPrice} fr
 import {getPriceFromTick, snapshotGasCost} from './helpers/utils';
 
 let factory: MockFactory;
-let poolOracle: PoolOracle;
+let poolOracle: MockPoolOracle;
 let token0: MockToken;
 let token1: MockToken;
 let quoter: QuoterV2;
@@ -46,7 +46,7 @@ let positionData: any;
 class Fixtures {
   constructor(
     public factory: MockFactory,
-    public poolOracle: PoolOracle,
+    public poolOracle: MockPoolOracle,
     public poolArray: MockPool[],
     public token0: MockToken,
     public token1: MockToken,
@@ -2172,6 +2172,7 @@ describe('Pool', () => {
     it('verify pool oracle has been initialized', async () => {
       await verifyStoredObservation(pool.address, true, 0, 1, 1);
       await verifyObservationAt(pool.address, 0, await pool.blockTimestamp(), BN.from(0), true);
+      await verifyObservationData(pool);
     });
 
     it('no new write when add position not cover current tick', async () => {
@@ -2185,6 +2186,7 @@ describe('Pool', () => {
       // index 0 should be with the initial data before advance time
       await verifyObservationAt(pool.address, 0, currentBlockTime, BN.from(0), true);
       await verifyObservationAt(pool.address, 1, 0, BN.from(0), false);
+      await verifyObservationData(pool);
 
       await pool.forwardTime(1);
       tickLower = nearestTickToPrice - 200 * tickDistance;
@@ -2194,6 +2196,10 @@ describe('Pool', () => {
       // index 0 should be with the initial data before advance time
       await verifyObservationAt(pool.address, 0, currentBlockTime, BN.from(0), true);
       await verifyObservationAt(pool.address, 1, 0, BN.from(0), false);
+      await verifyObservationData(pool);
+
+      await pool.forwardTime(200);
+      await verifyObservationData(pool);
     });
 
     it('write new entry when adding liquidity cover current tick', async () => {
@@ -2204,6 +2210,8 @@ describe('Pool', () => {
         await verifyObservationAt(pool.address, i, 1, BN.from(0), false);
       }
       await verifyStoredObservation(pool.address, true, 0, 1, 10);
+      await verifyObservationData(pool);
+
       let obs0 = await poolOracle.getObservationAt(pool.address, 0);
 
       nearestTickToPrice = (await getNearestSpacedTickAtPrice(initialPrice, tickDistance)).toNumber();
@@ -2222,6 +2230,7 @@ describe('Pool', () => {
         BN.from(1 * poolState.currentTick), // tick cumulative
         true                                // initialized
       );
+      await verifyObservationData(pool);
 
       let obs1 = await poolOracle.getObservationAt(pool.address, 1);
       await pool.forwardTime(10);
@@ -2241,6 +2250,10 @@ describe('Pool', () => {
         tickCumulative2,                    // tick cumulative
         true                                // initialized
       );
+      await verifyObservationData(pool);
+
+      await pool.forwardTime(200);
+      await verifyObservationData(pool);
     });
 
     it('no new entry when swap without crossing ticks', async () => {
@@ -2266,6 +2279,7 @@ describe('Pool', () => {
       await verifyStoredObservation(pool.address, true, poolObs.index, poolObs.cardinality, poolObs.cardinalityNext);
       await verifyObservationAt(pool.address, 0, obs0.blockTimestamp, obs0.tickCumulative, obs0.initialized);
       await verifyObservationAt(pool.address, 1, obs1.blockTimestamp, obs1.tickCumulative, obs1.initialized);
+      await verifyObservationData(pool);
 
       await pool.forwardTime(10);
       await callback.connect(user).swap(pool.address, user.address, swapAmount, true, MIN_SQRT_RATIO.add(1), '0x');
@@ -2275,6 +2289,10 @@ describe('Pool', () => {
       await verifyStoredObservation(pool.address, true, poolObs.index, poolObs.cardinality, poolObs.cardinalityNext);
       await verifyObservationAt(pool.address, 0, obs0.blockTimestamp, obs0.tickCumulative, obs0.initialized);
       await verifyObservationAt(pool.address, 1, obs1.blockTimestamp, obs1.tickCumulative, obs1.initialized);
+      await verifyObservationData(pool);
+
+      await pool.forwardTime(200);
+      await verifyObservationData(pool);
     });
 
     it('write new entry when swap crossing ticks', async () => {
@@ -2301,6 +2319,7 @@ describe('Pool', () => {
       // no change for the first 2 indexes
       await verifyObservationAt(pool.address, 0, obs0.blockTimestamp, obs0.tickCumulative, obs0.initialized);
       await verifyObservationAt(pool.address, 1, obs1.blockTimestamp, obs1.tickCumulative, obs1.initialized);
+      await verifyObservationData(pool);
       // the new entry is written, i.e index 2
       // tick cumulative should be updated with the old current tick value and obs1 tick cumulative
       await verifyObservationAt(
@@ -2310,6 +2329,7 @@ describe('Pool', () => {
         obs1.tickCumulative.add(currentTick * (currentTime - obs1.blockTimestamp)),
         true
       );
+      await verifyObservationData(pool);
 
       let obs2 = await poolOracle.getObservationAt(pool.address, 2);
       poolObs = await poolOracle.getPoolObservation(pool.address);
@@ -2335,6 +2355,10 @@ describe('Pool', () => {
         obs2.tickCumulative.add(currentTick * (currentTime - obs2.blockTimestamp)),
         true
       );
+      await verifyObservationData(pool);
+
+      await pool.forwardTime(200);
+      await verifyObservationData(pool);
     });
   });
 
@@ -2357,6 +2381,32 @@ describe('Pool', () => {
     expect(blockTimestamp).to.be.eq(_blockTimestamp);
     expect(tickCumulative).to.be.eq(_tickCumulative);
     expect(initialized).to.be.eq(_initialized);
+  }
+
+  const verifyObservationData = async(pool: MockPool) => {
+    // forward timestamp to match
+    let poolTimestamp = await pool.blockTimestamp();
+    let oracleTimestamp = await poolOracle.blockTimestamp();
+    if (oracleTimestamp - poolTimestamp > 0) await poolOracle.forwardTime(oracleTimestamp - poolTimestamp);
+
+    let stateData = await pool.getPoolState();
+    let currentTick = stateData.currentTick;
+
+    let secondsAgos = [];
+    for (let i = 0; i <= Math.min(100, oracleTimestamp); i++) {
+      secondsAgos.push(i);
+      // verify observe data for each i as second ago
+      expect(await poolOracle.observeSingleFromPool(pool.address, i)).to.be.eq(
+        await poolOracle.getObserveSingleFromPool(pool.address, oracleTimestamp, currentTick, i)
+      );
+    }
+
+    // verify observe data for list of secondsAgos
+    let tickCumulatives = await poolOracle.observeFromPool(pool.address, secondsAgos);
+    let expectedTickCumulatives = await poolOracle.getObserveFromPool(pool.address, oracleTimestamp, currentTick, secondsAgos);
+    for(let i = 0; i < tickCumulatives.length; i++) {
+      expect(tickCumulatives[i]).to.be.eq(expectedTickCumulatives[i]);
+    }
   }
 });
 

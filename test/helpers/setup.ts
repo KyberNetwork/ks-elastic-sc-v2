@@ -4,8 +4,8 @@ import {
   Factory,
   Pool,
   MockFactory,
-  PoolOracle,
-  PoolOracle__factory,
+  MockPoolOracle,
+  MockPoolOracle__factory,
   MockToken,
   Pool__factory,
   MockCallbacks2,
@@ -16,8 +16,8 @@ import {BigNumberish, BigNumber as BN} from 'ethers';
 import {getNearestSpacedTickAtPrice} from './utils';
 import {PRECISION, MIN_TICK, MAX_INT, MAX_TICK, ZERO, FEE_UNITS} from './helper';
 
-export async function deployMockFactory(admin: any, vestingPeriod: BigNumberish): Promise<[MockFactory, PoolOracle]> {
-  const PoolOracleContract = (await ethers.getContractFactory('PoolOracle')) as PoolOracle__factory;
+export async function deployMockFactory(admin: any, vestingPeriod: BigNumberish): Promise<[MockFactory, MockPoolOracle]> {
+  const PoolOracleContract = (await ethers.getContractFactory('MockPoolOracle')) as MockPoolOracle__factory;
   const poolOracle = await PoolOracleContract.connect(admin).deploy();
   await poolOracle.initialize();
   const FactoryContract = (await ethers.getContractFactory('MockFactory')) as MockFactory__factory;
@@ -26,7 +26,7 @@ export async function deployMockFactory(admin: any, vestingPeriod: BigNumberish)
 }
 
 export async function deployFactory(admin: any, vestingPeriod: BigNumberish): Promise<Factory> {
-  const PoolOracleContract = (await ethers.getContractFactory('PoolOracle')) as PoolOracle__factory;
+  const PoolOracleContract = (await ethers.getContractFactory('MockPoolOracle')) as MockPoolOracle__factory;
   const poolOracle = await PoolOracleContract.connect(admin).deploy();
   const FactoryContract = (await ethers.getContractFactory('Factory')) as Factory__factory;
   const factory = await FactoryContract.connect(admin).deploy(vestingPeriod, poolOracle.address);
