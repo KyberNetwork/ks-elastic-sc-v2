@@ -6,6 +6,8 @@ import 'solidity-coverage';
 import 'hardhat-typechain';
 import 'hardhat-contract-sizer';
 import '@openzeppelin/hardhat-upgrades';
+import "@matterlabs/hardhat-zksync-deploy";
+import "@matterlabs/hardhat-zksync-solc";
 
 import {HardhatUserConfig, SolcUserConfig} from 'hardhat/types';
 import * as dotenv from 'dotenv';
@@ -52,6 +54,13 @@ const veryLowRunSolcConfig = {
 };
 
 const config: HardhatUserConfig = {
+
+  zksolc: {
+    version: "1.3.10",
+    compilerSource: "binary",
+    settings: {},
+  },
+
   defaultNetwork: 'hardhat',
 
   gasReporter: {
@@ -65,6 +74,12 @@ const config: HardhatUserConfig = {
       allowUnlimitedContractSize: true,
       initialBaseFeePerGas: 0,
       gas: 15000000,
+    },
+
+    zkSyncTestnet: {
+      url: "https://testnet.era.zksync.dev",
+      ethNetwork: "https://rpc.ankr.com/eth_goerli",
+      zksync: true,
     },
   },
 
