@@ -121,23 +121,12 @@ const INFURA_API_KEY: string = process.env.INFURA_API_KEY || '';
 const PRIVATE_KEY: string = process.env.PRIVATE_KEY || '';
 
 if (INFURA_API_KEY != '' && PRIVATE_KEY != '') {
-  config.networks!.kovan = {
-    url: `https://kovan.infura.io/v3/${INFURA_API_KEY}`,
+  
+  config.networks!.linea = {
+    url: `https://linea-goerli.infura.io/v3/${INFURA_API_KEY}`,
+    // url: `https://rpc.goerli.linea.build`,
     accounts: [PRIVATE_KEY],
-    timeout: 20000,
-  };
-
-  config.networks!.rinkeby = {
-    url: `https://rinkeby.infura.io/v3/${INFURA_API_KEY}`,
-    accounts: [PRIVATE_KEY],
-    timeout: 20000,
-    blockGasLimit: 30000000,
-  };
-
-  config.networks!.ropsten = {
-    url: `https://ropsten.infura.io/v3/${INFURA_API_KEY}`,
-    accounts: [PRIVATE_KEY],
-    timeout: 20000,
+    timeout: 1000000,
   };
 
   config.networks!.mainnet = {
