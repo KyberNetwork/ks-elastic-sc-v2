@@ -91,17 +91,17 @@ describe('RouterTokenHelperWithFee', () => {
         'High fee'
       );
 
-      tokens.forEach(async (token) => {
+      for (const token of tokens) {
         await expect(
           tokenHelper.transferAllTokensWithFee(token.address, ZERO, user.address, ZERO, user.address)
         ).to.be.revertedWith('High fee');
         await expect(
-          tokenHelper.transferAllTokensWithFee(token.address, ZERO, user.address, 101, user.address)
+          tokenHelper.transferAllTokensWithFee(token.address, ZERO, user.address, 1001, user.address)
         ).to.be.revertedWith('High fee');
         await expect(
           tokenHelper.transferAllTokensWithFee(token.address, ZERO, user.address, BPS, user.address)
         ).to.be.revertedWith('High fee');
-      });
+      }
     });
 
     it('should revert if there are insufficient funds in the contract', async () => {
