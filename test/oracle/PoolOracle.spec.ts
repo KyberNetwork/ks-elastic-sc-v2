@@ -103,6 +103,12 @@ describe('PoolOracle', () => {
         await verifyObservationAt(user.address, 0, times[i], BN.from(0), true);
       }
     });
+
+    it('can not upgrade implementation contract', async () => {
+      await expect(poolOracle.connect(user).upgradeTo(admin.address)).to.be.reverted;
+
+      await expect(poolOracle.connect(user).upgradeToAndCall(admin.address, '')).to.be.reverted;
+    });
   });
 
   describe('#increaseObservationCardinalityNext', async () => {
