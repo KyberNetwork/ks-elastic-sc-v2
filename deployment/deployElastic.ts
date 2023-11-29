@@ -75,22 +75,26 @@ task('deployElastic', 'deploy router, factory and position manager')
       await poolOracleProxy.deployed();
       const poolOracle = await hre.upgrades.erc1967.getImplementationAddress(poolOracleProxy.address);
 
-      console.log('PoolOracleProxy deployed to:', poolOracleProxy.address);
-      console.log('PoolOracleImpl deployed to:', poolOracleImpl);
       outputData['poolOracleProxy'] = poolOracleProxy.address;
       outputData['poolOracleImpl'] = poolOracle;
       poolOracleAddress = poolOracleProxy.address;
       poolOracleImpl = poolOracle;
+      console.log('PoolOracleProxy deployed to:', poolOracleProxy.address);
+      console.log('PoolOracleImpl deployed to:', poolOracleImpl);
     } else {
       console.log(`pool oracle address: ${poolOracleAddress}`);
     }
 
-    console.log(`deploying factory...`);
+    // poolOracleAddress = '0xdd463A7a71122D0248f3Fa1eF975202bAEe74B46';
+
+    // console.log(`deploying factory...`);
     const Factory = (await hre.ethers.getContractFactory('Factory')) as Factory__factory;
     factory = await Factory.deploy(vestingPeriod, poolOracleAddress, {gasPrice: gasPrice});
     await factory.deployed();
     console.log(`factory address: ${factory.address}`);
     outputData['factory'] = factory.address;
+
+    // factory = await Factory.attach('0x40b7Ae13F825DE3D422032E8EC66F81d42fAD2ac');
 
     console.log(`deploying router...`);
     const Router = (await hre.ethers.getContractFactory('Router')) as Router__factory;

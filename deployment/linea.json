@@ -1,0 +1,8 @@
+{
+    "admin": "",
+    "vestingPeriod": 300,
+    "weth": "0x2C1b868d6596a18e32E61B901E4060C872647b6C",
+    "baseDescriptor": "",
+    "deployQuoter": true,
+    "outputFilename": "linea_deployment.json"
+}
