@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import {PoolTicksState} from '../PoolTicksState.sol';
 
+
 contract MockPoolTicksStateFactory {
   struct Parameters {
     address factory;
