@@ -1,0 +1,57 @@
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+## Profile configs
+[profile.default]
+src = 'contracts'
+out = 'out'
+libs = ['node_modules', 'lib']
+test = 'test/foundry'
+verbosity = 3
+cache_path  = 'forge-cache'
+ffi = true
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
+fs_permissions = [{ access = 'read', path = './'}]
+optimizer = true
+optimizer_runs = 999_999
+sizes = true
+gas_reports = ['*']
+ignored_error_codes = ['func-mutability', 'unused-var', 'unused-param']
+
+## Testing configs
+[fuzz]
+runs = 2048
+
+[invariant]
+depth = 2048
+fail_on_revert = false
+
+## Format configs
+[fmt]
+line_length = 100
+tab_width = 2
+bracket_spacing = false
+int_types = 'long'
+quote_style = 'single'
+multiline_func_header = 'params_first'
+
+## Node RPCs configs
+[rpc_endpoints]
+mainnet = "${ETH_NODE_URL}"
+bsc_mainnet = "${BSC_NODE_URL}"
+polygon_mainnet = "${POLYGON_NODE_URL}"
+avalanche_mainnet = "${AVAX_NODE_URL}"
+avalanche_fuji = "${AVAX_FUJI_NODE_URL}"
+fantom_mainnet = "${FTM_NODE_URL}"
+cronos_mainnet = "${CRONOS_NODE_URL}"
+aurora_mainnet = "${AURORA_NODE_URL}"
+arbitrum_mainnet = "${ARBITRUM_NODE_URL}"
+optimism_mainnet = "${OP_NODE_URL}"
+velas_mainnet = "${VELAS_NODE_URL}"
+oasis_mainnet = "${OASIS_NODE_URL}"
+bttc_mainnet = "${BTTC_NODE_URL}"
+ethereum_goerli = "${ETH_GOERLI_NODE_URL}"
+linea_mainnet = "${LINEA_NODE_URL}"
+polygon_zkevm_mainnet = "${POLYGON_ZKEVM_NODE_URL}"
+base_mainnet = "${BASE_NODE_URL}"
